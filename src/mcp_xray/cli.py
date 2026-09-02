@@ -108,6 +108,9 @@ def main() -> None:
         )
         sys.exit(2)
 
+    if parsed.fail_on_hijack_rate is not None and not parsed.agentic:
+        parser.error("--fail-on-hijack-rate has no effect without --agentic")
+
     try:
         findings = asyncio.run(_scan(parsed.command, parsed.args, parsed.agentic, parsed.trials))
     except Exception as exc:
