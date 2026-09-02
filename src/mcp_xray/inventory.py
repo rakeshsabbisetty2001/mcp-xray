@@ -1,12 +1,20 @@
 """Connect to an MCP server over stdio and enumerate what it exposes."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import Prompt, Resource, Tool
+
+_CONNECT_TIMEOUT_S = 20
+_LIST_TIMEOUT_S = 15
+# ponytail: single-page list_* calls only — a server with more entries than
+# fit in one page returns a cursor we ignore, so inventory silently truncates.
+# No target in the plan's demo/fixture list is anywhere near paginated; add a
+# cursor loop when a real target actually needs it.
 
 
 @dataclass
@@ -26,18 +34,22 @@ async def connect(command: str, args: list[str]):
     params = StdioServerParameters(command=command, args=args)
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
-            await session.initialize()
+            await asyncio.wait_for(session.initialize(), timeout=_CONNECT_TIMEOUT_S)
             yield session
 
 
 async def build_inventory(session: ClientSession) -> Inventory:
-    tools = (await session.list_tools()).tools
+    tools = (await asyncio.wait_for(session.list_tools(), timeout=_LIST_TIMEOUT_S)).tools
     try:
-        resources = (await session.list_resources()).resources
+        resources = (
+            await asyncio.wait_for(session.list_resources(), timeout=_LIST_TIMEOUT_S)
+        ).resources
     except Exception:
-        resources = []  # server doesn't implement resources — not an error
+        resources = []  # server doesn't implement resources, or timed out — not fatal
     try:
-        prompts = (await session.list_prompts()).prompts
+        prompts = (
+            await asyncio.wait_for(session.list_prompts(), timeout=_LIST_TIMEOUT_S)
+        ).prompts
     except Exception:
         prompts = []
     return Inventory(tools=tools, resources=resources, prompts=prompts)

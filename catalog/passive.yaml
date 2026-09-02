@@ -17,12 +17,16 @@ instruction_patterns:
     pattern: '(?i)\b(now\s+)?call\s+(the\s+)?[`"\x27]?\w+[`"\x27]?\s+tool\b'
     severity: medium
   - id: exfil_steering
+    # high not critical — this is a bare regex hit, not a confirmed exfil; avoid overclaiming (Round 1 review, §5)
     pattern: '(?i)\b(send|post|upload|forward)\s+(the\s+)?(contents?|data|output|env|config|secrets?)\s+(of|to)\b'
-    severity: critical
+    severity: high
   - id: hidden_unicode_tag_chars
     # U+E0000-E007F Unicode tag block — invisible ASCII smuggled in supplementary plane
     pattern: '[\U000E0000-\U000E007F]'
     severity: high
   - id: zero_width_chars
-    pattern: '[​‌‍﻿]'
+    # U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ — deliberately invisible-char smuggling.
+    # U+FEFF (BOM) intentionally excluded: it's a normal file-encoding artifact,
+    # not a smuggling signal, and would false-positive on any BOM'd resource.
+    pattern: '[​‌‍]'
     severity: medium

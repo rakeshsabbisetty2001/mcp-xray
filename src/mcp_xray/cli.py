@@ -34,10 +34,15 @@ def main() -> None:
     parser.add_argument("args", nargs=argparse.REMAINDER, help="arguments to that command")
     parsed = parser.parse_args()
 
-    findings = asyncio.run(_scan(parsed.command, parsed.args))
+    try:
+        findings = asyncio.run(_scan(parsed.command, parsed.args))
+    except Exception as exc:
+        print(f"mcp-xray: scan failed: {exc}", file=sys.stderr)
+        sys.exit(2)  # distinct from exit 1 (findings) — a crash isn't a clean scan result
+
     label = " ".join([parsed.command, *parsed.args])
     render(findings, server_label=label)
-    sys.exit(1 if any(f.severity.rank >= 2 for f in findings) else 0)  # exit non-zero on High+
+    sys.exit(1 if any(f.severity.rank >= 2 for f in findings) else 0)  # exit 1 on High+ findings
 
 
 if __name__ == "__main__":

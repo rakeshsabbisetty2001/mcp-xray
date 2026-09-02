@@ -13,14 +13,30 @@ from .base import Finding
 from .patterns import Pattern, scan_text
 
 
+def _describable_fields(schema: dict, prefix: str) -> dict[str, str]:
+    """Pull every 'description' string out of a JSON Schema fragment, recursively
+    (properties, array items, enum-adjacent siblings) — a poisoned description
+    can hide anywhere in the schema tree, not just top-level params."""
+    texts: dict[str, str] = {}
+    if not isinstance(schema, dict):
+        return texts
+    if desc := schema.get("description"):
+        texts[prefix] = desc
+    for name, sub in schema.get("properties", {}).items():
+        texts.update(_describable_fields(sub, f"{prefix}.{name}" if prefix else name))
+    if items := schema.get("items"):
+        texts.update(_describable_fields(items, f"{prefix}[]"))
+    return texts
+
+
 def run(tools: list[Tool], patterns: list[Pattern]) -> list[Finding]:
     findings: list[Finding] = []
     for tool in tools:
         texts = {"description": tool.description or ""}
-        props = (tool.input_schema or {}).get("properties", {})
-        for param_name, param_schema in props.items():
-            if isinstance(param_schema, dict) and "description" in param_schema:
-                texts[f"param:{param_name}"] = param_schema["description"]
+        if tool.title:
+            texts["title"] = tool.title
+        for field, text in _describable_fields(tool.input_schema or {}, "param").items():
+            texts[field] = text
 
         for field_label, text in texts.items():
             for pattern, matched in scan_text(text, patterns):

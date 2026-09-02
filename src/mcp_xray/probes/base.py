@@ -22,4 +22,6 @@ class Finding:
     severity: Severity
     target: str             # tool/resource/prompt name the finding is about
     summary: str
-    evidence: str            # the matched text / payload — redacted before it ever leaves this process
+    evidence: str            # the matched text — shown escaped/truncated in reports (report/console.py)
+                              # ponytail: not secret-redacted — B/C/G probes match instruction text, not
+                              # credentials. Real secret redaction lands with category E (active, Phase 3/4).

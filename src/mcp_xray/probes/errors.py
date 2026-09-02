@@ -7,12 +7,16 @@ error message for leaked stack traces, file paths, or internal hostnames.
 Sending genuinely malformed/adversarial input to *provoke* an error is category
 F and lives in active.yaml (Round 2 review: passive = no crafted payload).
 
-Skips any tool whose name hints at a mutation (write/delete/move/exec/...) —
-"no state change" is a promise this probe keeps by not calling those tools at
-all, not by hoping a benign-looking call happens to be side-effect-free.
+Safety: only calls a tool when `annotations.read_only_hint` is explicitly True.
+Tools with no annotations, or with any other hint set, are skipped — "no state
+change" is a promise this probe keeps by not calling a tool it can't vouch for,
+not by guessing from its name (a denylist like "write|delete|..." misses
+`send`, `publish`, `purchase`, `fetch`-as-SSRF, and every synonym never
+imagined for it).
 """
 from __future__ import annotations
 
+import asyncio
 import re
 
 from mcp import ClientSession
@@ -20,9 +24,8 @@ from mcp.types import Tool
 
 from .base import Finding, Severity
 
-_MUTATING_NAME_HINTS = re.compile(
-    r"(?i)\b(write|delete|remove|move|rename|create|edit|exec|run|update|set|put|post)\w*\b"
-)
+_CALL_TIMEOUT_S = 15
+_MAX_SCAN_CHARS = 100_000  # cap before regex scanning — a hostile server can return arbitrarily large output
 
 _LEAK_PATTERNS = [
     (re.compile(r'File "[^"]+\.py"'), "python stack trace"),
@@ -38,28 +41,50 @@ def _default_for(schema: dict) -> object:
             "array": [], "object": {}}.get(t, "")
 
 
+def _is_read_only(tool: Tool) -> bool:
+    return bool(tool.annotations and tool.annotations.read_only_hint is True)
+
+
+def _scan_message(message: str, tool_name: str) -> list[Finding]:
+    findings = []
+    for pattern, label in _LEAK_PATTERNS:
+        m = pattern.search(message[:_MAX_SCAN_CHARS])
+        if m:
+            findings.append(Finding(
+                category="G: Error Information Leak",
+                severity=Severity.MEDIUM,
+                target=tool_name,
+                summary=f"Error from a benign call leaked a {label}",
+                evidence=m.group(0),
+            ))
+    return findings
+
+
 async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
     findings: list[Finding] = []
     for tool in tools:
-        if _MUTATING_NAME_HINTS.search(tool.name):
-            continue  # can't guarantee no state change — stays passive by skipping, not by risking it
+        if not _is_read_only(tool):
+            continue  # unannotated or non-read-only — can't vouch for no state change, skip
         schema = tool.input_schema or {}
         props = schema.get("properties", {})
         required = schema.get("required", [])
         args = {name: _default_for(props.get(name, {})) for name in required}
 
         try:
-            await session.call_tool(tool.name, args)
+            result = await asyncio.wait_for(
+                session.call_tool(tool.name, args), timeout=_CALL_TIMEOUT_S
+            )
+        except TimeoutError:
+            continue  # a hang isn't an information-leak finding for this probe
         except Exception as exc:
-            message = str(exc)
-            for pattern, label in _LEAK_PATTERNS:
-                m = pattern.search(message)
-                if m:
-                    findings.append(Finding(
-                        category="G: Error Information Leak",
-                        severity=Severity.MEDIUM,
-                        target=tool.name,
-                        summary=f"Error from a benign call leaked a {label}",
-                        evidence=m.group(0),
-                    ))
+            findings += _scan_message(str(exc), tool.name)
+            continue
+
+        # call_tool does not raise on a tool-level error — it returns a result
+        # with isError=True and the message in content. That's the real leak surface.
+        if getattr(result, "isError", False):
+            text = "\n".join(
+                getattr(c, "text", "") for c in result.content if getattr(c, "text", None)
+            )
+            findings += _scan_message(text, tool.name)
     return findings
