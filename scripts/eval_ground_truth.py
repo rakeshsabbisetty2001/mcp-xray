@@ -24,6 +24,7 @@ from mcp_xray.probes import errors, metadata, resources  # noqa: E402
 from mcp_xray.probes.base import Finding  # noqa: E402
 from mcp_xray.probes.errors import _selftest as errors_selftest  # noqa: E402
 from mcp_xray.probes.patterns import load_instruction_patterns  # noqa: E402
+from mcp_xray.report.html import _selftest as html_selftest  # noqa: E402
 
 _FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -44,7 +45,8 @@ def _category_letter(finding: Finding) -> str:
 
 
 async def main() -> None:
-    errors_selftest()  # the one runnable unit check — wired in so it's actually part of CI, not dead code
+    errors_selftest()  # the one runnable unit check per module — wired in so they're actually part of CI, not dead code
+    html_selftest()
 
     ground_truth = yaml.safe_load(
         (_FIXTURES_DIR / "vulnerable" / "ground_truth.yaml").read_text(encoding="utf-8")

@@ -1,19 +1,25 @@
 """mcp-xray CLI — v1 supports the passive probe catalog only (Phase 1).
 
-    uv run mcp-xray <command> [args...]
+    uv run mcp-xray [--json out.json] [--html out.html] <command> [args...]
 
-e.g.  uv run mcp-xray npx -y @modelcontextprotocol/server-filesystem sandbox
+The --json/--html flags must come before <command> — everything after it is
+passed through verbatim to the target server (argparse.REMAINDER).
+
+e.g.  uv run mcp-xray --html report.html npx -y @modelcontextprotocol/server-filesystem sandbox
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 
 from .inventory import build_inventory, connect
 from .probes import errors, metadata, resources
 from .probes.base import Finding
 from .probes.patterns import load_instruction_patterns
+from .report import html as html_report
+from .report import json as json_report
 from .report.console import render
 
 
@@ -30,6 +36,8 @@ async def _scan(command: str, args: list[str]) -> list[Finding]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mcp-xray")
+    parser.add_argument("--json", metavar="PATH", help="write the JSON report to this path")
+    parser.add_argument("--html", metavar="PATH", help="write the standalone HTML report to this path")
     parser.add_argument("command", help="command that launches the target MCP server, e.g. npx")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="arguments to that command")
     parsed = parser.parse_args()
@@ -42,6 +50,10 @@ def main() -> None:
 
     label = " ".join([parsed.command, *parsed.args])
     render(findings, server_label=label)
+    if parsed.json:
+        json_report.write(Path(parsed.json), findings, label)
+    if parsed.html:
+        html_report.write(Path(parsed.html), findings, label)
     sys.exit(1 if any(f.severity.rank >= 2 for f in findings) else 0)  # exit 1 on High+ findings
 
 
