@@ -31,7 +31,10 @@ _LEAK_PATTERNS = [
     (re.compile(r'File "[^"]+\.py"'), "python stack trace"),
     (re.compile(r"at \S+\s+\([^)]+:\d+:\d+\)"), "node/js stack trace"),
     (re.compile(r"[A-Za-z]:\\[\w\\ .-]+"), "windows filesystem path"),
-    (re.compile(r"/(?:home|Users|var|etc)/[\w/.-]+"), "unix filesystem path"),
+    # generic absolute unix path, >=2 segments — not a directory-name allowlist
+    # (an allowlist of home|Users|var|etc misses /srv, /opt, /data, /app, ...;
+    # >=2 segments keeps a bare "/" or "/x" out of matching everything)
+    (re.compile(r"(?<![\w])/[\w.-]+(?:/[\w.-]+)+"), "unix filesystem path"),
 ]
 
 

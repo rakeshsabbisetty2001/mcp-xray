@@ -13,19 +13,38 @@ from .base import Finding
 from .patterns import Pattern, scan_text
 
 
-def _describable_fields(schema: dict, prefix: str) -> dict[str, str]:
+def _resolve_ref(ref: str, defs: dict) -> dict:
+    # Only local "#/$defs/Name" refs are relevant here (pydantic-generated
+    # schemas, which is how any FastMCP/MCPServer tool with a typed model
+    # param — a very common real-world shape — nests its descriptions).
+    name = ref.rsplit("/", 1)[-1]
+    return defs.get(name, {})
+
+
+def _describable_fields(schema: dict, prefix: str, defs: dict, _seen: set[str] | None = None) -> dict[str, str]:
     """Pull every 'description' string out of a JSON Schema fragment, recursively
-    (properties, array items, enum-adjacent siblings) — a poisoned description
-    can hide anywhere in the schema tree, not just top-level params."""
+    (properties, array items, $ref/$defs) — a poisoned description can hide
+    anywhere in the schema tree, not just top-level params. `_seen` guards
+    against a $ref cycle turning this into infinite recursion."""
     texts: dict[str, str] = {}
     if not isinstance(schema, dict):
         return texts
+    _seen = _seen or set()
+
+    if ref := schema.get("$ref"):
+        if ref in _seen:
+            return texts
+        return _describable_fields(_resolve_ref(ref, defs), prefix, defs, _seen | {ref})
+
     if desc := schema.get("description"):
         texts[prefix] = desc
     for name, sub in schema.get("properties", {}).items():
-        texts.update(_describable_fields(sub, f"{prefix}.{name}" if prefix else name))
+        texts.update(_describable_fields(sub, f"{prefix}.{name}" if prefix else name, defs, _seen))
     if items := schema.get("items"):
-        texts.update(_describable_fields(items, f"{prefix}[]"))
+        texts.update(_describable_fields(items, f"{prefix}[]", defs, _seen))
+    # anyOf/oneOf (e.g. `X | None`) — descend into each branch
+    for branch in schema.get("anyOf", []) + schema.get("oneOf", []):
+        texts.update(_describable_fields(branch, prefix, defs, _seen))
     return texts
 
 
@@ -35,7 +54,9 @@ def run(tools: list[Tool], patterns: list[Pattern]) -> list[Finding]:
         texts = {"description": tool.description or ""}
         if tool.title:
             texts["title"] = tool.title
-        for field, text in _describable_fields(tool.input_schema or {}, "param").items():
+        schema = tool.input_schema or {}
+        defs = schema.get("$defs", {})
+        for field, text in _describable_fields(schema, "param", defs).items():
             texts[field] = text
 
         for field_label, text in texts.items():

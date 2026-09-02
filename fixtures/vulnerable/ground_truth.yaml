@@ -1,0 +1,30 @@
+# Ground truth for fixtures/vulnerable/server.py — every finding mcp-xray's
+# current passive probes (B, C, G) SHOULD produce against this server.
+# fixtures/hardened/server.py has the same tool/resource/prompt surface with
+# no entries here — it's the false-positive baseline (should score 0).
+#
+# Caveat (Round 2 plan review): this catalog was authored, then checked
+# against the fixture below — not tuned to match probe output after the fact.
+# Any precision/recall measured against this single fixture pair is
+# IN-DISTRIBUTION ONLY, not a generalization estimate. See scripts/README.md.
+
+expected:
+  - category: C
+    target: summarize_document
+    note: top-level tool description poisoning ("ignore previous instructions", "call the ... tool")
+
+  - category: C
+    target: lookup_user
+    note: nested poisoning behind a $ref (pydantic model field description) — regression fixture for the $defs-resolution bug found 2026-09-02
+
+  - category: B
+    target: readme
+    note: resource content poisoning
+
+  - category: B
+    target: daily_summary
+    note: prompt description poisoning
+
+  - category: G
+    target: read_note
+    note: internal path leaked via an anticipated ToolError message, not a crash — the SDK masks unhandled-exception detail by default, so this models a developer re-surfacing internal detail on purpose, not a framework bug
