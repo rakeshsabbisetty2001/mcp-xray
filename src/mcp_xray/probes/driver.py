@@ -95,6 +95,11 @@ class AnthropicDriverClient:
             messages=messages,
             tools=tools,
         )
+        # Findings claim to stamp "the exact driver model id" — make that true
+        # against what the API actually served, not just what we requested
+        # (an alias like "claude-sonnet-5" can resolve to a specific dated
+        # snapshot the response reports back).
+        self.model = resp.model
         text = "".join(b.text for b in resp.content if b.type == "text")
         calls = [ToolCallIntent(name=b.name, input=b.input) for b in resp.content if b.type == "tool_use"]
         return TurnResult(text=text, tool_calls=calls)
