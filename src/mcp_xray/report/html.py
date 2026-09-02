@@ -10,6 +10,7 @@ security report opened in a browser.
 """
 from __future__ import annotations
 
+import re
 from html import escape
 from pathlib import Path
 
@@ -21,6 +22,23 @@ _SEVERITY_COLOR = {
     Severity.MEDIUM: "#d97706",
     Severity.LOW: "#6b7280",
 }
+
+# Bidi control chars (RLO/LRO/RLE/LRE/PDF: U+202A-U+202E, and the isolates
+# U+2066-U+2069) let a hostile server visually reorder its own evidence text
+# in a browser — not XSS, but this report's whole job is showing the analyst
+# what the server actually said, so a "trojan source"-style spoof here
+# defeats the point. json.py leaves evidence raw (exact bytes matter for
+# that machine-consumed sink); this is the human-facing renderer, so it
+# strips them before escaping. Built via chr()/range rather than embedding
+# the literal (invisible-by-design) characters in this source file.
+_BIDI_CONTROL_CHARS = re.compile(
+    "[" + "".join(chr(c) for c in (*range(0x202A, 0x202F), *range(0x2066, 0x206A))) + "]"
+)
+
+
+def _display_safe(text: str) -> str:
+    return escape(_BIDI_CONTROL_CHARS.sub("", text))
+
 
 _STYLE = """
   body { font-family: -apple-system, Segoe UI, sans-serif; background: #0b0b0c; color: #e5e5e5; margin: 2rem; }
@@ -35,7 +53,13 @@ _STYLE = """
 
 
 def _severity_badge(sev: Severity) -> str:
-    return f'<span class="sev" style="background:{_SEVERITY_COLOR[sev]}">{escape(sev.value.upper())}</span>'
+    # sev is our own enum, never server-controlled — the only value
+    # interpolated into an unquoted-context attribute in this whole report.
+    # If evidence/target/etc ever need to reach an attribute, they must go
+    # through _display_safe() AND single-quote-escaping first; escape()
+    # alone does not escape "'".
+    color = _SEVERITY_COLOR.get(sev, "#71717a")  # graceful fallback if Severity ever grows a new member
+    return f'<span class="sev" style="background:{color}">{escape(sev.value.upper())}</span>'
 
 
 def render(findings: list[Finding], server_label: str) -> str:
@@ -47,9 +71,9 @@ def render(findings: list[Finding], server_label: str) -> str:
         f"""<tr>
           <td>{_severity_badge(f.severity)}</td>
           <td>{escape(f.category)}</td>
-          <td><code>{escape(f.target)}</code></td>
-          <td>{escape(f.summary)}</td>
-          <td><code>{escape(f.evidence)}</code></td>
+          <td><code>{_display_safe(f.target)}</code></td>
+          <td>{_display_safe(f.summary)}</td>
+          <td><code>{_display_safe(f.evidence)}</code></td>
         </tr>"""
         for f in findings
     )
@@ -57,7 +81,7 @@ def render(findings: list[Finding], server_label: str) -> str:
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>mcp-xray report</title><style>{_STYLE}</style></head>
 <body>
-  <h1>mcp-xray &gt; {escape(server_label)}</h1>
+  <h1>mcp-xray &gt; {_display_safe(server_label)}</h1>
   <p class="summary-line">{len(findings)} findings — {escape(summary)}</p>
   <table>
     <thead><tr><th>Sev</th><th>Category</th><th>Target</th><th>Finding</th><th>Evidence</th></tr></thead>
@@ -87,6 +111,15 @@ def _selftest() -> None:
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in out
     assert "&lt;script&gt;alert(2)&lt;/script&gt;" in out
     assert "&lt;img src=x onerror=alert(1)&gt;" in out
+
+    # Bidi-override spoofing: a hostile server shouldn't be able to visually
+    # reorder its own evidence line (RLO = chr(0x202E)).
+    spoofed = Finding(
+        category="C", severity=Severity.LOW, target="t",
+        summary="s", evidence=f"safe{chr(0x202E)}desprever",
+    )
+    out2 = render([spoofed], "server")
+    assert chr(0x202E) not in out2, "bidi override character reached the report"
 
 
 if __name__ == "__main__":

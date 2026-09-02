@@ -42,6 +42,17 @@ def main() -> None:
     parser.add_argument("args", nargs=argparse.REMAINDER, help="arguments to that command")
     parsed = parser.parse_args()
 
+    # --json/--html placed after <command> silently vanish into REMAINDER
+    # instead of erroring — a security CLI failing quiet is the worst class
+    # of bug here, so warn rather than let the user believe a report exists.
+    for flag in ("--json", "--html"):
+        if any(a == flag or a.startswith(f"{flag}=") for a in parsed.args):
+            print(
+                f"mcp-xray: warning: '{flag}' must come before <command>, "
+                f"not after — ignoring it, no report will be written for it",
+                file=sys.stderr,
+            )
+
     try:
         findings = asyncio.run(_scan(parsed.command, parsed.args))
     except Exception as exc:
@@ -50,10 +61,18 @@ def main() -> None:
 
     label = " ".join([parsed.command, *parsed.args])
     render(findings, server_label=label)
-    if parsed.json:
-        json_report.write(Path(parsed.json), findings, label)
-    if parsed.html:
-        html_report.write(Path(parsed.html), findings, label)
+
+    # A write failure (bad path, no permission) must not exit 1 — that's
+    # indistinguishable from "High+ findings found" in a CI gate.
+    try:
+        if parsed.json:
+            json_report.write(Path(parsed.json), findings, label)
+        if parsed.html:
+            html_report.write(Path(parsed.html), findings, label)
+    except OSError as exc:
+        print(f"mcp-xray: failed to write report: {exc}", file=sys.stderr)
+        sys.exit(2)
+
     sys.exit(1 if any(f.severity.rank >= 2 for f in findings) else 0)  # exit 1 on High+ findings
 
 

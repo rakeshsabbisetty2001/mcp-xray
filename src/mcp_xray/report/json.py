@@ -4,17 +4,25 @@ from __future__ import annotations
 import json as _json
 from pathlib import Path
 
-from ..probes.base import Finding
+from ..probes.base import Finding, Severity
 
 
 def to_dict(findings: list[Finding], server_label: str) -> dict:
-    counts = {}
+    findings = sorted(findings, key=lambda f: -f.severity.rank)  # same order as console/html
+    # Seed every severity at 0 — a consumer doing counts["high"] on a clean
+    # scan shouldn't KeyError just because nothing was found.
+    counts = {s.value: 0 for s in Severity}
     for f in findings:
-        counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
+        counts[f.severity.value] += 1
     return {
         "server": server_label,
         "finding_count": len(findings),
         "severity_counts": counts,
+        # ponytail: evidence is raw here — not truncated (console.py) or
+        # bidi-sanitized (html.py). This is the machine-consumed sink where
+        # exact bytes matter for reproducibility. Revisit before category E
+        # (secrets) ships, and if this file starts getting pasted into
+        # GitHub issues raw.
         "findings": [
             {
                 "category": f.category,
