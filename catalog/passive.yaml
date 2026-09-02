@@ -1,0 +1,28 @@
+# Passive probe catalog — no crafted payload sent, no state change on the target.
+# Definition per Round 2 review: passive = no crafted payload AND no state change.
+# Category F (schema/malformed-input confusion) is entirely ACTIVE by this definition
+# and lives in catalog/active.yaml (Phase 4) — omitted here.
+
+instruction_patterns:
+  # Regex patterns (case-insensitive) that flag instruction-like text hiding in
+  # tool descriptions, resource contents, or prompt templates. Used by
+  # probes/metadata.py (category C) and probes/resources.py (category B).
+  - id: override_directive
+    pattern: '(?i)\b(ignore|disregard)\s+(all\s+)?(previous|prior|above)\s+instructions?\b'
+    severity: high
+  - id: system_role_spoof
+    pattern: '(?i)\b(system|assistant)\s*:\s*(you must|you should|now do|call the)\b'
+    severity: high
+  - id: imperative_tool_call
+    pattern: '(?i)\b(now\s+)?call\s+(the\s+)?[`"\x27]?\w+[`"\x27]?\s+tool\b'
+    severity: medium
+  - id: exfil_steering
+    pattern: '(?i)\b(send|post|upload|forward)\s+(the\s+)?(contents?|data|output|env|config|secrets?)\s+(of|to)\b'
+    severity: critical
+  - id: hidden_unicode_tag_chars
+    # U+E0000-E007F Unicode tag block — invisible ASCII smuggled in supplementary plane
+    pattern: '[\U000E0000-\U000E007F]'
+    severity: high
+  - id: zero_width_chars
+    pattern: '[​‌‍﻿]'
+    severity: medium
