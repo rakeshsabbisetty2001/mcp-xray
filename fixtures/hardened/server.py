@@ -53,5 +53,18 @@ def read_note(note_id: str) -> str:
     return notes[note_id]
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def fetch_status(service: str) -> str:
+    """Check an upstream service's status.
+
+    Regression fixture: a benign error message that legitimately contains a
+    URL. probes/errors.py's leak-path regex used to false-positive on the
+    path component of a URL as a "unix filesystem path" — this is what
+    proves that's fixed (any finding here is a false positive by definition,
+    same as every other hardened-fixture tool).
+    """
+    raise ToolError(f"fetch failed for https://api.example.com/v1/{service}")
+
+
 if __name__ == "__main__":
     mcp.run("stdio")

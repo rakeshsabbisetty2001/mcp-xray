@@ -33,8 +33,11 @@ _LEAK_PATTERNS = [
     (re.compile(r"[A-Za-z]:\\[\w\\ .-]+"), "windows filesystem path"),
     # generic absolute unix path, >=2 segments — not a directory-name allowlist
     # (an allowlist of home|Users|var|etc misses /srv, /opt, /data, /app, ...;
-    # >=2 segments keeps a bare "/" or "/x" out of matching everything)
-    (re.compile(r"(?<![\w])/[\w.-]+(?:/[\w.-]+)+"), "unix filesystem path"),
+    # >=2 segments keeps a bare "/" or "/x" out of matching everything). The
+    # negative lookbehind also excludes ':' and a preceding '/' so it doesn't
+    # match the path component of a URL (https://api.example.com/v1/users is
+    # an upstream-service reference, not a filesystem leak).
+    (re.compile(r"(?<![\w:/])/[\w.-]+(?:/[\w.-]+)+"), "unix filesystem path"),
 ]
 
 
@@ -97,7 +100,9 @@ async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
 
 
 def _selftest() -> None:
-    """ponytail: the smallest thing that fails if the is_error wiring breaks again."""
+    """ponytail: the smallest thing that fails if the is_error wiring, or the
+    leak regex, breaks again. Wired into scripts/eval_ground_truth.py so it's
+    not a check nobody runs."""
     from mcp.types import CallToolResult, TextContent
 
     result = CallToolResult(
@@ -107,8 +112,18 @@ def _selftest() -> None:
     text = "\n".join(c.text for c in result.content if getattr(c, "text", None))
     assert result.is_error, "CallToolResult.is_error should be True for this fixture"
     findings = _scan_message(text, "fake_tool")
-    assert len(findings) == 1, f"expected 1 leak finding, got {len(findings)}"
-    assert findings[0].evidence == 'File "/app/handler.py"'
+    # This text is legitimately both a python stack trace AND a generic unix
+    # path — two distinct patterns, two findings. That's correct, not double
+    # counting (see scripts/eval_ground_truth.py, which groups by
+    # (category, target) rather than counting raw findings for this reason).
+    labels = {f.summary for f in findings}
+    assert len(findings) == 2, f"expected 2 leak findings, got {len(findings)}: {labels}"
+    assert any("python stack trace" in s for s in labels)
+    assert any("unix filesystem path" in s for s in labels)
+
+    # Regression check for the URL false-positive this probe used to have.
+    url_findings = _scan_message("fetch failed for https://api.example.com/v1/users", "fake_tool")
+    assert url_findings == [], f"URL should not be flagged as a filesystem path: {url_findings}"
 
 
 if __name__ == "__main__":

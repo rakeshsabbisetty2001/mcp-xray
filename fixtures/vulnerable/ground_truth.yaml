@@ -6,7 +6,7 @@
 # Caveat (Round 2 plan review): this catalog was authored, then checked
 # against the fixture below — not tuned to match probe output after the fact.
 # Any precision/recall measured against this single fixture pair is
-# IN-DISTRIBUTION ONLY, not a generalization estimate. See scripts/README.md.
+# IN-DISTRIBUTION ONLY, not a generalization estimate.
 
 expected:
   - category: C
@@ -15,7 +15,8 @@ expected:
 
   - category: C
     target: lookup_user
-    note: nested poisoning behind a $ref (pydantic model field description) — regression fixture for the $defs-resolution bug found 2026-09-02
+    field: param.filters[].field
+    note: nested poisoning behind a $ref (pydantic model field description) — regression fixture for the $defs-resolution bug found 2026-09-02. `field` is pinned so this stays a real regression check — without it, any other finding on lookup_user would count as a false TP if $ref resolution broke again.
 
   - category: B
     target: readme

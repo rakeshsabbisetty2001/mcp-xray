@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from mcp_xray.inventory import build_inventory, connect  # noqa: E402
 from mcp_xray.probes import errors, metadata, resources  # noqa: E402
 from mcp_xray.probes.base import Finding  # noqa: E402
+from mcp_xray.probes.errors import _selftest as errors_selftest  # noqa: E402
 from mcp_xray.probes.patterns import load_instruction_patterns  # noqa: E402
 
 _FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
@@ -42,11 +43,9 @@ def _category_letter(finding: Finding) -> str:
     return finding.category.split(":", 1)[0].strip()
 
 
-def _matches(finding: Finding, category: str, target: str) -> bool:
-    return _category_letter(finding) == category and finding.target.startswith(target)
-
-
 async def main() -> None:
+    errors_selftest()  # the one runnable unit check — wired in so it's actually part of CI, not dead code
+
     ground_truth = yaml.safe_load(
         (_FIXTURES_DIR / "vulnerable" / "ground_truth.yaml").read_text(encoding="utf-8")
     )["expected"]
@@ -64,8 +63,17 @@ async def main() -> None:
     matched_groups: set[tuple[str, str]] = set()
 
     for entry in ground_truth:
-        cat, target = entry["category"], entry["target"]
-        hit = next((g for g in vuln_groups if g[0] == cat and g[1].startswith(target)), None)
+        cat, target, field = entry["category"], entry["target"], entry.get("field")
+        # `field` pins the specific schema/description location when given —
+        # without it, a regression fixture like the $ref one could score a
+        # false TP off an unrelated finding on the same tool.
+        hit = next(
+            (
+                g for g in vuln_groups
+                if g[0] == cat and g[1].startswith(target) and (field is None or field in g[1])
+            ),
+            None,
+        )
         if hit is not None:
             counts[cat]["tp"] += 1
             matched_groups.add(hit)
