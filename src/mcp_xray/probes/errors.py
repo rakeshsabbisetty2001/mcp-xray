@@ -81,10 +81,33 @@ async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
             continue
 
         # call_tool does not raise on a tool-level error — it returns a result
-        # with isError=True and the message in content. That's the real leak surface.
-        if getattr(result, "isError", False):
+        # with is_error=True and the message in content. That's the real leak
+        # surface. Plain attribute access, not getattr(..., False): if the SDK
+        # ever renames this field again, this should fail loudly, not silently
+        # disable the probe the way `getattr(result, "isError", False)` did.
+        if result.is_error:
             text = "\n".join(
                 getattr(c, "text", "") for c in result.content if getattr(c, "text", None)
             )
             findings += _scan_message(text, tool.name)
     return findings
+
+
+def _selftest() -> None:
+    """ponytail: the smallest thing that fails if the is_error wiring breaks again."""
+    from mcp.types import CallToolResult, TextContent
+
+    result = CallToolResult(
+        content=[TextContent(type="text", text='Traceback: File "/app/handler.py", line 12')],
+        is_error=True,
+    )
+    text = "\n".join(c.text for c in result.content if getattr(c, "text", None))
+    assert result.is_error, "CallToolResult.is_error should be True for this fixture"
+    findings = _scan_message(text, "fake_tool")
+    assert len(findings) == 1, f"expected 1 leak finding, got {len(findings)}"
+    assert findings[0].evidence == 'File "/app/handler.py"'
+
+
+if __name__ == "__main__":
+    _selftest()
+    print("errors.py self-test passed")
