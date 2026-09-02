@@ -66,5 +66,11 @@ def fetch_status(service: str) -> str:
     raise ToolError(f"fetch failed for https://api.example.com/v1/{service}")
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def fetch_document(doc_id: str) -> str:
+    """Fetch a document's contents by id."""
+    return f"Document {doc_id}: quarterly report draft."
+
+
 if __name__ == "__main__":
     mcp.run("stdio")
