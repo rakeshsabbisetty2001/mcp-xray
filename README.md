@@ -81,7 +81,7 @@ Both currently report **1.00 precision / 1.00 recall** — but read that number 
 
 ### Tests
 
-No pytest suite. Modules with logic worth pinning independently of the fixtures (`errors.py`, `driver.py`, `permissions.py`, `secrets.py`, `schema_confusion.py`, `tool_args.py`, `report/html.py`, `cli.py`) each ship a `_selftest()` — runnable directly, e.g. `uv run python -m mcp_xray.probes.errors` — and both calibration scripts call every one of them before scoring the fixtures. The two remaining probes (`metadata.py`, `resources.py`) have no separate self-test; they're exercised by `eval_ground_truth.py`'s precision/recall scoring instead. Running `eval_ground_truth.py` + `eval_active.py` *is* the test suite; that's what CI runs.
+No pytest suite. Modules with logic worth pinning independently of the fixtures (`errors.py`, `driver.py`, `permissions.py`, `secrets.py`, `schema_confusion.py`, `tool_args.py`, `report/html.py`, `cli.py`) each ship a `_selftest()` — runnable directly, e.g. `uv run python -m mcp_xray.probes.errors` — and, between them, the two calibration scripts call all eight before scoring the fixtures. The two remaining probes (`metadata.py`, `resources.py`) have no separate self-test; they're exercised by `eval_ground_truth.py`'s precision/recall scoring instead. Running `eval_ground_truth.py` + `eval_active.py` *is* the test suite; that's what CI runs.
 
 ## CI usage
 

@@ -165,6 +165,15 @@ def _selftest() -> None:
         matched = any(sig in text.lower() for sig in signatures)
         assert matched == should_match, f"{payload_id} on {text!r}: expected match={should_match}, got {matched}"
 
+    # _ACTIVELY_PROBED_NAMES is a hardcoded constant, not derived from
+    # catalog/active.yaml's risky_param_names — pins that it stays a subset,
+    # so editing the catalog can't silently drift the two apart (whole-repo
+    # review nit).
+    catalog_names = set(load_active_catalog()["risky_param_names"])
+    assert _ACTIVELY_PROBED_NAMES <= catalog_names, (
+        f"_ACTIVELY_PROBED_NAMES has names not in the catalog: {_ACTIVELY_PROBED_NAMES - catalog_names}"
+    )
+
     # Regression check: D's evidence must be redacted, not just truncated
     # (Round 1 review this phase — a real hole: D's own best-case SSRF hit,
     # the AWS metadata endpoint, is one hop from real AccessKeyId/
