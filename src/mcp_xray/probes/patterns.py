@@ -5,16 +5,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from importlib import resources
 
 import yaml
 
 from .base import Severity
-
-# ponytail: catalog/ ships alongside the repo (not as packaged data) — v1 is
-# run from a checkout via `uv run`, not installed standalone. Revisit with
-# importlib.resources if/when this ships as a packaged wheel.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass
@@ -24,9 +19,18 @@ class Pattern:
     severity: Severity
 
 
+def _load_yaml(catalog_file: str) -> dict:
+    # catalog/ ships INSIDE the package (mcp_xray/catalog/) specifically so
+    # this resolves correctly whether running from a checkout via `uv run`
+    # or from a real uvx/pipx install with no repo on disk at all — verified
+    # by installing the built wheel into an isolated venv and running from
+    # outside this directory (Phase 5, packaging).
+    text = resources.files("mcp_xray.catalog").joinpath(catalog_file).read_text(encoding="utf-8")
+    return yaml.safe_load(text)
+
+
 def _load_patterns(catalog_file: str, key: str) -> list[Pattern]:
-    catalog_path = _REPO_ROOT / "catalog" / catalog_file
-    data = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+    data = _load_yaml(catalog_file)
     return [
         Pattern(id=p["id"], regex=re.compile(p["pattern"]), severity=Severity(p["severity"]))
         for p in data[key]
@@ -44,8 +48,7 @@ def load_secret_patterns() -> list[Pattern]:
 def load_active_catalog() -> dict:
     """Raw dict access for active.yaml's non-Pattern-shaped entries
     (ssrf_payloads, path_traversal_payloads, risky_param_names, secret_bait_values)."""
-    catalog_path = _REPO_ROOT / "catalog" / "active.yaml"
-    return yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+    return _load_yaml("active.yaml")
 
 
 def scan_text(text: str, patterns: list[Pattern]) -> list[tuple[Pattern, str]]:
