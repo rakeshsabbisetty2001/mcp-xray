@@ -26,6 +26,7 @@ from mcp_xray.probes.base import Finding  # noqa: E402
 from mcp_xray.probes.driver import _selftest as driver_selftest  # noqa: E402
 from mcp_xray.probes.errors import _selftest as errors_selftest  # noqa: E402
 from mcp_xray.probes.patterns import load_instruction_patterns  # noqa: E402
+from mcp_xray.probes.tool_args import _selftest as tool_args_selftest  # noqa: E402
 from mcp_xray.report.html import _selftest as html_selftest  # noqa: E402
 
 _FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
@@ -47,6 +48,7 @@ def _category_letter(finding: Finding) -> str:
 
 
 async def main() -> None:
+    tool_args_selftest()  # pins the default_for() mutable-default bug fixed in category F's review
     errors_selftest()  # the one runnable unit check per module — wired in so they're actually part of CI, not dead code
     html_selftest()
     await driver_selftest()  # zero-API-cost: uses FakeDriverClient, proves the agentic pipeline wiring, not a real hijack rate

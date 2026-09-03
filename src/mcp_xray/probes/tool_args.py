@@ -53,3 +53,23 @@ def default_args(tool: Tool, skip: str | None = None) -> dict:
         for name in schema.get("required", [])
         if name != skip
     }
+
+
+def _selftest() -> None:
+    """ponytail: pins the freshness invariant a consolidation bug broke once
+    already (Round 1 review, category F) — default_for() must return a new
+    object each call for mutable types, not a shared module-level default."""
+    a, b = default_for({"type": "object"}), default_for({"type": "object"})
+    assert a is not b, "default_for(object) returned the same object twice"
+    a["x"] = 1
+    assert default_for({"type": "object"}) == {}, "mutating one default_for() result affected a later call"
+
+    c, d = default_for({"type": "array"}), default_for({"type": "array"})
+    assert c is not d, "default_for(array) returned the same object twice"
+    c.append(1)
+    assert default_for({"type": "array"}) == [], "mutating one default_for() result affected a later call"
+
+
+if __name__ == "__main__":
+    _selftest()
+    print("tool_args.py self-test passed")
