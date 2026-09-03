@@ -64,7 +64,7 @@ Abridged to one row per (category, tool) pair — the full 19, including every d
 | MEDIUM | F: Schema Confusion (Info Leak) | `process_item` (param.item) |
 | LOW | D: Over-Broad Permission (Structural) | `read_file`, `fetch_url` |
 
-The same fixture's hardened counterpart (`fixtures/hardened/server.py`, same tool surface, sanitized) scores **0 findings** — that's the calibration baseline (`scripts/eval_ground_truth.py`, `scripts/eval_active.py`), not a cherry-picked demo.
+The same fixture's hardened counterpart (`fixtures/hardened/server.py`, same tool surface, sanitized) scores **0 findings in every scored category** (B/C/D-active/E/F/G) — that's the calibration baseline (`scripts/eval_ground_truth.py`, `scripts/eval_active.py`), not a cherry-picked demo. It's not literally zero total output: structural D (the schema-shape flag, LOW severity) fires on both fixtures by design — a risky-shaped param name is a real signal regardless of whether the server actually validates it, so it isn't scored for precision/recall (`scripts/eval_active.py` treats it as a sanity check, not a false positive).
 
 > No animated demo GIF yet — this environment had no terminal-recording tooling (`vhs`/`asciinema`/`ffmpeg`) available when this README was written. The table above is real captured JSON output, hand-formatted for readability. A GIF is a cheap follow-up whenever there's a machine with that tooling.
 
@@ -77,7 +77,11 @@ uv run python scripts/eval_ground_truth.py   # passive: B, C, G
 uv run python scripts/eval_active.py         # active: D, E, F
 ```
 
-Both currently report **1.00 precision / 1.00 recall** — but read that number correctly: it's calibration on the single fixture pair the probes were authored against, run in CI on every probe-catalog change. It's a real signal that the detection wiring works end to end, **not** a generalization estimate of real-world accuracy against servers this project has never seen. Both scripts print that caveat every time they run.
+Both currently report **1.00 precision / 1.00 recall** — but read that number correctly: it's calibration on the single fixture pair the probes were authored against, run in CI (`.github/workflows/calibration.yml`) on every push and PR. It's a real signal that the detection wiring works end to end, **not** a generalization estimate of real-world accuracy against servers this project has never seen. Both scripts print that caveat every time they run.
+
+### Tests
+
+No pytest suite. Modules with logic worth pinning independently of the fixtures (`errors.py`, `driver.py`, `permissions.py`, `secrets.py`, `schema_confusion.py`, `tool_args.py`, `report/html.py`, `cli.py`) each ship a `_selftest()` — runnable directly, e.g. `uv run python -m mcp_xray.probes.errors` — and both calibration scripts call every one of them before scoring the fixtures. The two remaining probes (`metadata.py`, `resources.py`) have no separate self-test; they're exercised by `eval_ground_truth.py`'s precision/recall scoring instead. Running `eval_ground_truth.py` + `eval_active.py` *is* the test suite; that's what CI runs.
 
 ## CI usage
 

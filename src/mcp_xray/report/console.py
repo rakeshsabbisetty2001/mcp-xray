@@ -19,11 +19,21 @@ _STYLE = {
 _MAX_EVIDENCE_CHARS = 80
 
 
+def _display_safe(text: str) -> str:
+    """unicode_escape makes hidden/bidi characters visible as \\uXXXX
+    instead of invisible or reordering the row — applied to every
+    server-controlled field, not just evidence (whole-repo review: html.py
+    already did this for target/summary/server_label, console.py only did
+    it for evidence — a hostile tool name with an RLO char could reorder
+    this table's TARGET column undetected)."""
+    return text.encode("unicode_escape").decode("ascii")
+
+
 def render(findings: list[Finding], server_label: str) -> None:
     console = Console()
     findings = sorted(findings, key=lambda f: -f.severity.rank)
 
-    table = Table(title=f"mcp-xray > {server_label}")
+    table = Table(title=f"mcp-xray > {_display_safe(server_label)}")
     table.add_column("SEV")
     table.add_column("CATEGORY")
     table.add_column("TARGET")
@@ -40,9 +50,9 @@ def render(findings: list[Finding], server_label: str) -> None:
         table.add_row(
             Text(f.severity.value.upper(), style=_STYLE[f.severity]),
             Text(f.category),
-            Text(f.target),
-            Text(f.summary),
-            Text(evidence.encode("unicode_escape").decode("ascii")),
+            Text(_display_safe(f.target)),
+            Text(_display_safe(f.summary)),
+            Text(_display_safe(evidence)),
         )
 
     console.print(table)

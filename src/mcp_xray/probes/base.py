@@ -23,5 +23,8 @@ class Finding:
     target: str             # tool/resource/prompt name the finding is about
     summary: str
     evidence: str            # the matched text — shown escaped/truncated in reports (report/console.py)
-                              # ponytail: not secret-redacted — B/C/G probes match instruction text, not
-                              # credentials. Real secret redaction lands with category E (active, Phase 3/4).
+                              # ponytail: B/C/G evidence is instruction text, not credentials, so it's
+                              # shown in full. Any probe whose evidence can legitimately contain a real
+                              # secret (D/E's active payloads, A's captured tool output) routes through
+                              # patterns.redact_secrets() before it reaches this field — not this
+                              # dataclass's job to enforce, each probe owns its own capture boundary.

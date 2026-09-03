@@ -1,0 +1,22 @@
+name: calibration
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      # Both scripts exit non-zero on any regression (a self-test failure,
+      # or a precision/recall drop against ground truth) — that's the gate.
+      # Neither needs a real MCP server or an API key: both spawn only this
+      # repo's own fixtures over stdio, and category A (--agentic) is opt-in
+      # and not part of either script.
+      - run: uv run python scripts/eval_ground_truth.py
+      - run: uv run python scripts/eval_active.py
+      - run: uv build

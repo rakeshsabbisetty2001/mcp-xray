@@ -39,6 +39,14 @@ _SSRF_SIGNATURE_SETS = {
     "file_scheme": _UNIX_ESCAPE_SIGNATURES,
 }
 
+# Of risky_param_names (path/file/filepath/cmd/command/query/sql/exec/url),
+# only these actually get an active probe today — cmd/command/query/sql/exec
+# are flagged structurally but nothing in `run()` sends them a payload
+# (whole-repo review: the structural finding's summary used to claim every
+# flagged name gets "confirmed or refuted" by --authorized, which was false
+# for 5 of 9 catalog entries).
+_ACTIVELY_PROBED_NAMES = {"path", "file", "filepath", "url"}
+
 
 def scan_schema(tools: list[Tool]) -> list[Finding]:
     """Structural half — no calls, param name/type inspection only."""
@@ -50,6 +58,13 @@ def scan_schema(tools: list[Tool]) -> list[Finding]:
             if not isinstance(schema, dict) or schema.get("type") != "string":
                 continue
             if name.lower() in risky_names:
+                if name.lower() in _ACTIVELY_PROBED_NAMES:
+                    followup = "confirmed or refuted by --authorized's active path-traversal/SSRF probes."
+                else:
+                    followup = (
+                        "not yet backed by an active probe (only path/file/filepath/url are "
+                        "currently sent payloads) — treat as inventory context, not a confirmed check."
+                    )
                 findings.append(Finding(
                     category="D: Over-Broad Permission (Structural)",
                     # LOW, not MEDIUM (Round 1 review this phase): this check
@@ -63,8 +78,7 @@ def scan_schema(tools: list[Tool]) -> list[Finding]:
                     summary=(
                         f"Parameter '{name}' accepts a free-form string and its name suggests "
                         f"filesystem/network/command scope — flagged as arbitrary-execution-risk-"
-                        f"shaped. This is a schema-shape signal, not proof; confirmed or refuted "
-                        f"by --authorized's active path-traversal/SSRF probes."
+                        f"shaped. This is a schema-shape signal, not proof; {followup}"
                     ),
                     evidence=f"param.{name}: string, no visible allowlist/pattern constraint",
                 ))
@@ -115,9 +129,8 @@ async def _probe_param(
 
 async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
     """Active half — real payloads, real calls. Caller gates this on --authorized."""
-    risky_names = load_active_catalog()["risky_param_names"]
-    path_names = {n for n in risky_names if n in ("path", "file", "filepath")}
-    url_names = {n for n in risky_names if n == "url"}
+    path_names = _ACTIVELY_PROBED_NAMES - {"url"}
+    url_names = {"url"}
 
     findings: list[Finding] = []
     for tool in tools:

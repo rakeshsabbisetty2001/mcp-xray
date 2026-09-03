@@ -101,7 +101,7 @@ async def main() -> None:
     recall = tp / (tp + fn) if (tp + fn) else float("nan")
     print(f"TP={tp} FP={fp} FN={fn}  precision={precision:.2f} recall={recall:.2f}")
 
-    print(f"\n--- false-positive baseline (hardened, active D+E+F only) ---")
+    print("\n--- false-positive baseline (hardened, active D+E+F only) ---")
     print(f"hardened active D+E+F findings: {len(hard_active)} (expect 0)")
     for f in hard_active:
         print(f"  UNEXPECTED: {f.category} / {f.target} / {f.summary}")

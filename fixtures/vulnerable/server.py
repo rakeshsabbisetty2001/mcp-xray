@@ -8,12 +8,13 @@ inspiration for realistic vulnerability shapes, never as a code base (checked
 forking").
 
 Each tool/resource/prompt below is labeled in ground_truth.yaml with exactly
-which mcp-xray passive category (B/C/G) it should trip, or, for D/E, is a
-category the standalone D/E ground-truth check (scripts/eval_active.py)
-covers separately. Category A (agentic, Phase 3) has a fixture case too
-(fetch_document) but is NOT wired into any automated calibration — it costs
-driver-model API calls and is opt-in via CLI --agentic. Category F has no
-fixture coverage yet — still unbuilt.
+which mcp-xray passive category (B/C/G) it should trip, or, for D/E/F, is a
+category the standalone active ground-truth check (scripts/eval_active.py,
+fixtures/vulnerable/ground_truth_active.yaml) covers separately. Category A
+(agentic) has a fixture case too (fetch_document) but is NOT wired into any
+free automated calibration — it costs driver-model API calls and is opt-in
+via CLI --agentic (run live for the first time 2026-09-03: 0/70 hijacks
+across the full default scan — see README's Status section).
 """
 from __future__ import annotations
 

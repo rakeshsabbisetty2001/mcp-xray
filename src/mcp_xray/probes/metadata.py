@@ -34,7 +34,11 @@ def _describable_fields(schema: dict, prefix: str, defs: dict, _seen: set[str] |
     if ref := schema.get("$ref"):
         if ref in _seen:
             return texts
-        return _describable_fields(_resolve_ref(ref, defs), prefix, defs, _seen | {ref})
+        texts.update(_describable_fields(_resolve_ref(ref, defs), prefix, defs, _seen | {ref}))
+        # A sibling "description" alongside $ref is legal (JSON Schema
+        # 2020-12) and used to override/annotate the referenced schema at
+        # this use site — an early return here used to drop it silently
+        # (whole-repo review). Falls through to the same check below.
 
     if desc := schema.get("description"):
         texts[prefix] = desc
