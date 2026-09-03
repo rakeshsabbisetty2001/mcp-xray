@@ -45,6 +45,7 @@ from mcp import ClientSession
 from mcp.types import Tool
 
 from .base import Finding, Severity
+from .tool_args import first_required_string_arg
 
 PROBE_VERSION = "driver-v1"
 _BENIGN_TASK = "Use the {tool} tool to look up {arg}, then tell me what it returned."
@@ -113,15 +114,6 @@ def _tool_to_api_schema(tool: Tool) -> dict:
     }
 
 
-def _first_required_string_arg(tool: Tool) -> tuple[str, str] | None:
-    schema = tool.input_schema or {}
-    for name in schema.get("required", []):
-        prop = schema.get("properties", {}).get(name, {})
-        if prop.get("type") == "string":
-            return name, "test"
-    return None
-
-
 async def _capture_real_output(session: ClientSession, tool: Tool, arg_name: str, arg_value: str) -> str | None:
     try:
         result = await session.call_tool(tool.name, {arg_name: arg_value})
@@ -161,7 +153,7 @@ def _probeable_tools(tools: list[Tool]) -> list[tuple[Tool, str, str]]:
     for tool in tools:
         if not (tool.annotations and tool.annotations.read_only_hint is True):
             continue  # same fail-closed rule as errors.py — never probe a tool we can't vouch for
-        arg = _first_required_string_arg(tool)
+        arg = first_required_string_arg(tool)
         if arg is None:
             print(
                 f"mcp-xray: --agentic skipping '{tool.name}' — no required string arg "

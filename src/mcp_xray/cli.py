@@ -1,19 +1,26 @@
 """mcp-xray CLI.
 
     uv run mcp-xray [--json out.json] [--html out.html] [--agentic]
-                    [--trials N] [--fail-on-hijack-rate N] <command> [args...]
+                    [--trials N] [--fail-on-hijack-rate N] [--authorized]
+                    [--unsafe-full-transcripts DIR] <command> [args...]
 
 The mcp-xray flags must come before <command> — everything after it is
 passed through verbatim to the target server (argparse.REMAINDER).
 
 --agentic runs category A (probes/driver.py) on top of the always-on passive
-catalog (B/C/G). It costs real driver-model API calls (ANTHROPIC_API_KEY),
-is never run by default, and never gates the exit code unless you pass
---fail-on-hijack-rate — a hijack rate is a signal to read, not a server-
-intrinsic pass/fail (plan §3/Round 1 review).
+catalog (B/C/G + D's structural half). It costs real driver-model API calls
+(ANTHROPIC_API_KEY), is never run by default, and never gates the exit code
+unless you pass --fail-on-hijack-rate — a hijack rate is a signal to read,
+not a server-intrinsic pass/fail (plan §3/Round 1 review).
+
+--authorized runs category D's active half (real path-traversal/SSRF
+payloads) and category E (secret-bait probing) — real attacks against the
+target, not scans, gated per Round 1 review §2. Only run this against a
+server you own or are explicitly authorized to test.
 
 e.g.  uv run mcp-xray --html report.html npx -y @modelcontextprotocol/server-filesystem sandbox
       uv run mcp-xray --agentic uv run python fixtures/vulnerable/server.py
+      uv run mcp-xray --authorized uv run python fixtures/vulnerable/server.py
 """
 from __future__ import annotations
 
@@ -25,7 +32,7 @@ import sys
 from pathlib import Path
 
 from .inventory import build_inventory, connect
-from .probes import driver, errors, metadata, resources
+from .probes import driver, errors, metadata, permissions, resources, secrets
 from .probes.base import Finding
 from .probes.patterns import load_instruction_patterns
 from .report import html as html_report
@@ -36,7 +43,10 @@ _AGENTIC_CATEGORY_PREFIX = "A:"  # keeps agentic findings out of the default exi
 _HIJACK_RATE_RE = re.compile(r"hijack_rate=([\d.]+)")
 
 
-async def _scan(command: str, args: list[str], agentic: bool, trials: int) -> list[Finding]:
+async def _scan(
+    command: str, args: list[str], agentic: bool, trials: int,
+    authorized: bool, unsafe_dir: Path | None,
+) -> list[Finding]:
     patterns = load_instruction_patterns()
     async with connect(command, args) as session:
         inv = await build_inventory(session)
@@ -44,6 +54,10 @@ async def _scan(command: str, args: list[str], agentic: bool, trials: int) -> li
         findings += metadata.run(inv.tools, patterns)
         findings += await resources.run(session, inv.resources, inv.prompts, patterns)
         findings += await errors.run(session, inv.tools)
+        findings += permissions.scan_schema(inv.tools)  # structural D — passive, always on
+        if authorized:
+            findings += await permissions.run(session, inv.tools)
+            findings += await secrets.run(session, inv.tools, unsafe_dir=unsafe_dir)
         if agentic:
             client = driver.AnthropicDriverClient()
             findings += await driver.run(session, inv.tools, client, trials=trials)
@@ -84,6 +98,16 @@ def main() -> None:
         "--fail-on-hijack-rate", type=float, default=None, metavar="N",
         help="exit 1 if any --agentic finding's hijack rate is >= N (0.0-1.0); without this flag agentic findings never gate the exit code",
     )
+    parser.add_argument(
+        "--authorized", action="store_true",
+        help="run category D's active half (real path-traversal/SSRF payloads) and category E "
+             "(secret-bait probing) — real attacks, only against a server you own or are authorized to test",
+    )
+    parser.add_argument(
+        "--unsafe-full-transcripts", metavar="DIR", default=None,
+        help="with --authorized, save category E's full unredacted matches to this local directory "
+             "(gitignore it) — never printed, never in the JSON/HTML/console reports",
+    )
     parser.add_argument("command", help="command that launches the target MCP server, e.g. npx")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="arguments to that command")
     parsed = parser.parse_args()
@@ -92,7 +116,8 @@ def main() -> None:
     # REMAINDER instead of erroring — a security CLI failing quiet is the
     # worst class of bug here, so warn rather than let the user believe a
     # report exists or an agentic scan ran.
-    for flag in ("--json", "--html", "--agentic", "--trials", "--fail-on-hijack-rate"):
+    for flag in ("--json", "--html", "--agentic", "--trials", "--fail-on-hijack-rate",
+                 "--authorized", "--unsafe-full-transcripts"):
         if any(a == flag or a.startswith(f"{flag}=") for a in parsed.args):
             print(
                 f"mcp-xray: warning: '{flag}' must come before <command>, "
@@ -111,8 +136,16 @@ def main() -> None:
     if parsed.fail_on_hijack_rate is not None and not parsed.agentic:
         parser.error("--fail-on-hijack-rate has no effect without --agentic")
 
+    if parsed.unsafe_full_transcripts is not None and not parsed.authorized:
+        parser.error("--unsafe-full-transcripts has no effect without --authorized")
+
+    unsafe_dir = Path(parsed.unsafe_full_transcripts) if parsed.unsafe_full_transcripts else None
+
     try:
-        findings = asyncio.run(_scan(parsed.command, parsed.args, parsed.agentic, parsed.trials))
+        findings = asyncio.run(_scan(
+            parsed.command, parsed.args, parsed.agentic, parsed.trials,
+            parsed.authorized, unsafe_dir,
+        ))
     except Exception as exc:
         print(f"mcp-xray: scan failed: {exc}", file=sys.stderr)
         sys.exit(2)  # distinct from exit 1 (findings) — a crash isn't a clean scan result

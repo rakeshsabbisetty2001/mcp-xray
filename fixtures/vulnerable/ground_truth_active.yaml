@@ -1,0 +1,39 @@
+# Ground truth for the ACTIVE half of category D and all of category E,
+# against fixtures/vulnerable/server.py. Separate from ground_truth.yaml
+# (passive B/C/G) because category D's structural half legitimately fires on
+# BOTH fixtures (a schema-shape signal, not proof — see permissions.py) so it
+# can't share the "hardened = 0 findings" precision baseline the passive
+# categories use. scripts/eval_active.py reads this file.
+#
+# Caveat (same as ground_truth.yaml): authored, then checked against this
+# fixture — in-distribution only, not a generalization estimate.
+
+expected:
+  - category: D
+    target: read_file
+    note: unix path traversal escape (fake /etc/passwd content) — windows_traversal payload intentionally produces no separate finding, since this fixture's read_file doesn't distinguish payload shape, only "contains .."
+
+  - category: D
+    target: fetch_url
+    field: aws_metadata_endpoint
+    note: SSRF to the AWS instance-metadata endpoint
+
+  - category: D
+    target: fetch_url
+    field: localhost_port_scan
+    note: SSRF to a local port (fake SSH banner)
+
+  - category: D
+    target: fetch_url
+    field: file_scheme
+    note: SSRF via file:// scheme
+
+  - category: E
+    target: debug_status
+    field: aws_access_key
+    note: bait value 'config' elicits a fake AWS key in the response
+
+  - category: E
+    target: debug_status
+    field: openai_key
+    note: same bait call also contains a fake OpenAI-shaped key — both patterns match one response, one Finding each

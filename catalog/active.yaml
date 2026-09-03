@@ -1,0 +1,83 @@
+# Active probe catalog — sends a crafted payload to the target and/or expects
+# a state-adjacent effect. Gated behind CLI --authorized (Round 1 review §2);
+# every probe here is used only against locally stdio-spawned processes in
+# this CLI — there is no remote-host transport built yet (plan §1
+# out-of-scope), so the Round 2 review's "refuse non-localhost unless
+# --allow-remote" rule has nothing to gate yet. Deferred, not forgotten —
+# add --allow-remote when HTTP/SSE transport exists.
+#
+# Category D (over-broad permissions) and E (secret exfiltration).
+
+ssrf_payloads:
+  # Sent to any tool whose schema names/types suggest it accepts a URL.
+  # Detection is signature-based on the RESPONSE, not just "we sent it" —
+  # a tool that validates and rejects these is not a finding.
+  - id: aws_metadata_endpoint
+    value: "http://169.254.169.254/latest/meta-data/"
+    severity: critical
+  - id: localhost_port_scan
+    value: "http://localhost:22"
+    severity: high
+  - id: file_scheme
+    value: "file:///etc/passwd"
+    severity: high
+
+path_traversal_payloads:
+  # Sent to any tool whose schema names/types suggest it accepts a filesystem
+  # path. Detection looks for known escape signatures in the response
+  # (/etc/passwd's "root:x:0:0", win.ini's "[fonts]") — heuristic against a
+  # real unknown target's actual file contents, exact against this project's
+  # own fixtures where the content is known. Documented ceiling, not silent.
+  - id: unix_traversal
+    value: "../../../../etc/passwd"
+    severity: high
+  - id: windows_traversal
+    value: "..\\..\\..\\..\\windows\\win.ini"
+    severity: high
+
+# Param name/type heuristics for the structural (passive-safe, no call made)
+# half of category D — flags a tool as arbitrary-execution-risk-shaped before
+# any payload is sent. Kept in this file rather than passive.yaml because it
+# shares category D with the active checks above, even though this specific
+# check makes no call and needs no --authorized gate.
+risky_param_names:
+  - path
+  - file
+  - filepath
+  - cmd
+  - command
+  - query
+  - sql
+  - exec
+  - url
+
+secret_patterns:
+  # Same shape as passive.yaml's instruction_patterns, different job: these
+  # match actual credential material, not instruction text — so a hit here
+  # is redacted before it ever becomes a Finding (report/redact.py), unlike
+  # B/C/G's evidence which is safe to show in full.
+  - id: aws_access_key
+    pattern: 'AKIA[0-9A-Z]{16}'
+    severity: critical
+  - id: github_token
+    pattern: 'gh[pousr]_[A-Za-z0-9]{36,}'
+    severity: critical
+  - id: openai_key
+    pattern: 'sk-[A-Za-z0-9]{20,}'
+    severity: critical
+  - id: jwt
+    pattern: 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'
+    severity: high
+  - id: private_key_header
+    pattern: '-----BEGIN (RSA |EC |OPENSSH |DSA |)PRIVATE KEY-----'
+    severity: critical
+
+secret_bait_values:
+  # Tried as the value of any required string arg on a read-only tool, to see
+  # if the tool dumps config/env/debug info that happens to contain a secret.
+  # Bait, not exploitation — no auth bypass, no injection, just plausible
+  # legitimate-looking argument values a curious user might try.
+  - config
+  - debug
+  - env
+  - ".env"

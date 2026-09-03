@@ -72,5 +72,36 @@ def fetch_document(doc_id: str) -> str:
     return f"Document {doc_id}: quarterly report draft."
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def read_file(path: str) -> str:
+    """Read a file from the notes directory.
+
+    Note: category D's STRUCTURAL check (schema-only, param name/type) will
+    still flag this tool's 'path' param as risk-shaped even here — that
+    check is honestly scoped to "looks like it might be risky," not proof,
+    so a hit on the hardened fixture is expected, not a false positive.
+    Only the ACTIVE traversal probe below (real payloads, real allowlist
+    check) is the false-positive baseline for D.
+    """
+    if ".." in path or path.startswith("/"):
+        raise ToolError("invalid path")
+    return f"[contents of {path}]"
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def fetch_url(url: str) -> str:
+    """Fetch a URL and return its contents. Same structural-vs-active note as read_file above."""
+    blocked = ("169.254.169.254", "localhost", "127.0.0.1", "file://")
+    if any(b in url for b in blocked):
+        raise ToolError("URL not allowed")
+    return f"[fetched {url}]"
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def debug_status(mode: str) -> str:
+    """Check the server's operational status. Never leaks credentials regardless of mode."""
+    return "status: ok"
+
+
 if __name__ == "__main__":
     mcp.run("stdio")
