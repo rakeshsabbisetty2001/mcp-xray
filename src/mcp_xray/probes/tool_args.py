@@ -9,8 +9,8 @@ from mcp.types import Tool
 
 _DEFAULT_BY_TYPE = {
     "string": "", "number": 0, "integer": 0, "boolean": False,
-    "array": [], "object": {},
-}
+    "array": list, "object": dict,
+}  # array/object are constructors, not literals — see default_for()
 
 
 def is_read_only(tool: Tool) -> bool:
@@ -32,8 +32,15 @@ def first_required_string_arg(tool: Tool) -> tuple[str, str] | None:
 
 def default_for(schema: dict) -> object:
     """The minimal schema-satisfying value for a JSON-Schema fragment's
-    declared type — "" for string, 0 for number, etc."""
-    return _DEFAULT_BY_TYPE.get(schema.get("type"), "")
+    declared type — "" for string, 0 for number, etc. A fresh [] / {} every
+    call, not a shared module-level object: the original per-file versions
+    of this each built a literal per call, and an earlier consolidation of
+    them here returned the SAME mutable list/dict to every caller across
+    every tool and every probe — nothing mutates it today, so no live bug,
+    but sharing a mutable default across unrelated call sites is exactly
+    the kind of thing that becomes one later (Round 1 review, category F)."""
+    default = _DEFAULT_BY_TYPE.get(schema.get("type"), "")
+    return default() if callable(default) else default
 
 
 def default_args(tool: Tool, skip: str | None = None) -> dict:

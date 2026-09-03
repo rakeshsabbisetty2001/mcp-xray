@@ -39,5 +39,9 @@ expected:
       F's `empty_object_for_object` payload too. G legitimately catches
       the same leak from a "benign" call that F catches from a "malformed"
       one; this isn't a probe bug, it's two probes correctly agreeing on
-      one real bug via two different trigger paths. See
+      one real bug via two different trigger paths — verified this is a
+      property of THIS fixture, not general duplication: a `dict` param
+      with `required` sub-keys of its own (a nested pydantic model, not a
+      bare `dict`) would give G a different, schema-valid minimal object
+      than F's deliberately-empty one, and the two would diverge. See
       fixtures/vulnerable/ground_truth_active.yaml for F's own entry.

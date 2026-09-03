@@ -32,6 +32,26 @@ from .tool_args import default_args, is_read_only
 _CALL_TIMEOUT_S = 15
 
 
+def _declared_type(prop_schema: dict) -> str | None:
+    """The param's JSON-Schema type, unwrapping anyOf/oneOf (how a required
+    `X | None`-typed param — no default, so still required — renders: no
+    top-level "type" key, just branches). Same failure mode category C was
+    fixed for (metadata.py's _describable_fields) — a bare `.get("type")`
+    silently misses every anyOf-shaped param, which a `continue` here would
+    turn into a silent skip, not a loud gap. $ref (a full nested model
+    param, e.g. lookup_user's `filters: list[UserFilter]`) is NOT resolved
+    here — only real for this project's fixtures on an optional param
+    (skipped anyway, not required), so left as a documented ceiling rather
+    than pulling in metadata.py's $defs-resolution machinery for a case
+    with no fixture demonstrating it yet."""
+    if t := prop_schema.get("type"):
+        return t
+    for branch in prop_schema.get("anyOf", []) + prop_schema.get("oneOf", []):
+        if isinstance(branch, dict) and branch.get("type") not in (None, "null"):
+            return branch["type"]
+    return None
+
+
 def _matching_payloads(catalog: dict, declared_type: str) -> list[dict]:
     return [
         p for p in catalog["schema_confusion_payloads"]
@@ -112,7 +132,16 @@ async def _probe_oversized(session: ClientSession, tool: Tool, param_name: str, 
 
 
 async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
-    """Caller gates this on --authorized — never invoked otherwise."""
+    """Caller gates this on --authorized — never invoked otherwise.
+
+    Note on _probe_oversized's timeout: asyncio.wait_for cancels the
+    in-flight call_tool on timeout, but the target may still be processing
+    it — a late response on the same stdio session could land unexpectedly
+    during a LATER call. F runs last among cli.py's --authorized probes and
+    in scripts/eval_active.py, but --agentic's driver.run() (a separate
+    probe, its own real call_tool) can still run after F in the same
+    session if both flags are passed together — a real, currently
+    unhandled edge case, not fully contained."""
     catalog = load_active_catalog()
     findings: list[Finding] = []
     for tool in tools:
@@ -123,9 +152,9 @@ async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
         required = schema.get("required", [])
         oversized_done = False
         for name in required:
-            declared_type = props.get(name, {}).get("type")
+            declared_type = _declared_type(props.get(name, {}))
             if not declared_type:
-                continue
+                continue  # documented ceiling — see _declared_type's docstring for what this still misses ($ref)
             findings += await _probe_param(session, tool, name, declared_type, catalog)
             if declared_type == "string" and not oversized_done:
                 # One oversized-payload trial per tool, not per param — bounded
