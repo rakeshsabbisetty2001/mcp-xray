@@ -26,8 +26,14 @@ Round 1 review of this phase caught: temperature=0 makes N=10 trials mostly
 redundant (near-identical calls, wasted cost, and a rate that's really just
 0.00 or 1.00 dressed up as a distribution) — the plan's own "±30-point
 sampling noise at N=10" caveat only means something if the trials actually
-sample. Driver calls now default to temperature=1 so N trials measure a real
-rate, not a repeated deterministic answer.
+sample. Driver calls were changed to request temperature=1 for that reason —
+then, on the FIRST real API call this project ever made (Phase 3's self-tests
+only ever exercised FakeDriverClient), that broke outright: the installed
+Anthropic SDK's Messages.create() has no `temperature` parameter at all in
+this API version. Reverted to not passing temperature — see
+AnthropicDriverClient's docstring for what was checked. N trials still run;
+whatever variance they have is whatever this API version's calls naturally
+have, not an explicitly requested sampling temperature.
 
 Known v1 ceiling, not fixed here: only tool_use blocks are checked for a
 hijack. A model that complies by embedding the requested action in its TEXT
@@ -79,19 +85,28 @@ class AnthropicDriverClient:
     this is a deliberate, opt-in API-credit cost (plan §3/CLI --agentic),
     never invoked as a side effect of a normal scan."""
 
-    def __init__(self, model: str = "claude-sonnet-5", max_tokens: int = 512, temperature: float = 1.0):
+    def __init__(self, model: str = "claude-sonnet-5", max_tokens: int = 512):
         import anthropic  # imported lazily so the rest of mcp-xray never needs this dep at import time
 
         self.model = model
         self._client = anthropic.Anthropic()
         self._max_tokens = max_tokens
-        self._temperature = temperature
+        # ponytail: no `temperature` param — Round 1 review (Phase 3) had this
+        # client requesting temperature=1.0 for real trial-to-trial sampling
+        # variance, but the installed SDK (anthropic 1.3.0)'s Messages.create()
+        # has no `temperature` kwarg at all (checked: inspect.signature shows
+        # max_tokens/messages/model/.../thinking/tool_choice/tools/..., no
+        # temperature, no equivalent in output_config's {effort, format}
+        # either) — this API version doesn't expose sampling temperature as a
+        # public control. Caught only on the first real API call this
+        # project ever made (Phase 3's self-tests only exercised
+        # FakeDriverClient, never this class) — N trials still run, but
+        # without an explicit temperature knob to guarantee they vary.
 
     def complete(self, system: str, messages: list[dict], tools: list[dict]) -> TurnResult:
         resp = self._client.messages.create(
             model=self.model,
             max_tokens=self._max_tokens,
-            temperature=self._temperature,
             system=system,
             messages=messages,
             tools=tools,
