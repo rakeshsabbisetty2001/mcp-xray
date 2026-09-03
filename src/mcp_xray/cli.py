@@ -14,9 +14,10 @@ unless you pass --fail-on-hijack-rate — a hijack rate is a signal to read,
 not a server-intrinsic pass/fail (plan §3/Round 1 review).
 
 --authorized runs category D's active half (real path-traversal/SSRF
-payloads) and category E (secret-bait probing) — real attacks against the
-target, not scans, gated per Round 1 review §2. Only run this against a
-server you own or are explicitly authorized to test.
+payloads), category E (secret-bait probing), and category F (schema-
+confusion/malformed-input probing) — real attacks against the target, not
+scans, gated per Round 1 review §2. Only run this against a server you own
+or are explicitly authorized to test.
 
 e.g.  uv run mcp-xray --html report.html npx -y @modelcontextprotocol/server-filesystem sandbox
       uv run mcp-xray --agentic uv run python fixtures/vulnerable/server.py
@@ -32,7 +33,7 @@ import sys
 from pathlib import Path
 
 from .inventory import build_inventory, connect
-from .probes import driver, errors, metadata, permissions, resources, secrets
+from .probes import driver, errors, metadata, permissions, resources, schema_confusion, secrets
 from .probes.base import Finding
 from .probes.patterns import load_instruction_patterns
 from .report import html as html_report
@@ -58,6 +59,7 @@ async def _scan(
         if authorized:
             findings += await permissions.run(session, inv.tools)
             findings += await secrets.run(session, inv.tools, unsafe_dir=unsafe_dir)
+            findings += await schema_confusion.run(session, inv.tools)
         if agentic:
             client = driver.AnthropicDriverClient()
             findings += await driver.run(session, inv.tools, client, trials=trials)
@@ -101,8 +103,9 @@ def main() -> None:
     parser.add_argument(
         "--authorized", action="store_true",
         help="send real attack payloads: SSRF (AWS metadata endpoint, localhost:22, file:// scheme), "
-             "path traversal (../../../../etc/passwd), and secret-bait tool calls (config/debug/env "
-             "argument values) — only against a server you own or are explicitly authorized to test. "
+             "path traversal (../../../../etc/passwd), secret-bait tool calls (config/debug/env "
+             "argument values), and schema-confusion/malformed-input calls (wrong JSON types, an "
+             "oversized string) — only against a server you own or are explicitly authorized to test. "
              "See README's Safety section before pointing this at anything else.",
     )
     parser.add_argument(

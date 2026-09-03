@@ -17,64 +17,36 @@ imagined for it).
 from __future__ import annotations
 
 import asyncio
-import re
 
 from mcp import ClientSession
 from mcp.types import Tool
 
 from .base import Finding, Severity
+from .patterns import scan_for_leaks
+from .tool_args import default_args, is_read_only
 
 _CALL_TIMEOUT_S = 15
-_MAX_SCAN_CHARS = 100_000  # cap before regex scanning — a hostile server can return arbitrarily large output
-
-_LEAK_PATTERNS = [
-    (re.compile(r'File "[^"]+\.py"'), "python stack trace"),
-    (re.compile(r"at \S+\s+\([^)]+:\d+:\d+\)"), "node/js stack trace"),
-    (re.compile(r"[A-Za-z]:\\[\w\\ .-]+"), "windows filesystem path"),
-    # generic absolute unix path, >=2 segments — not a directory-name allowlist
-    # (an allowlist of home|Users|var|etc misses /srv, /opt, /data, /app, ...;
-    # >=2 segments keeps a bare "/" or "/x" out of matching everything). The
-    # negative lookbehind also excludes ':' and a preceding '/' so it doesn't
-    # match the path component of a URL (https://api.example.com/v1/users is
-    # an upstream-service reference, not a filesystem leak).
-    (re.compile(r"(?<![\w:/])/[\w.-]+(?:/[\w.-]+)+"), "unix filesystem path"),
-]
-
-
-def _default_for(schema: dict) -> object:
-    t = schema.get("type")
-    return {"string": "", "number": 0, "integer": 0, "boolean": False,
-            "array": [], "object": {}}.get(t, "")
-
-
-def _is_read_only(tool: Tool) -> bool:
-    return bool(tool.annotations and tool.annotations.read_only_hint is True)
 
 
 def _scan_message(message: str, tool_name: str) -> list[Finding]:
-    findings = []
-    for pattern, label in _LEAK_PATTERNS:
-        m = pattern.search(message[:_MAX_SCAN_CHARS])
-        if m:
-            findings.append(Finding(
-                category="G: Error Information Leak",
-                severity=Severity.MEDIUM,
-                target=tool_name,
-                summary=f"Error from a benign call leaked a {label}",
-                evidence=m.group(0),
-            ))
-    return findings
+    return [
+        Finding(
+            category="G: Error Information Leak",
+            severity=Severity.MEDIUM,
+            target=tool_name,
+            summary=f"Error from a benign call leaked a {label}",
+            evidence=matched,
+        )
+        for label, matched in scan_for_leaks(message)
+    ]
 
 
 async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
     findings: list[Finding] = []
     for tool in tools:
-        if not _is_read_only(tool):
+        if not is_read_only(tool):
             continue  # unannotated or non-read-only — can't vouch for no state change, skip
-        schema = tool.input_schema or {}
-        props = schema.get("properties", {})
-        required = schema.get("required", [])
-        args = {name: _default_for(props.get(name, {})) for name in required}
+        args = default_args(tool)
 
         try:
             result = await asyncio.wait_for(

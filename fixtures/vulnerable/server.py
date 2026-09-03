@@ -147,5 +147,34 @@ def debug_status(mode: str) -> str:
     return "status: ok"
 
 
+# --- Category F: schema confusion / input validation ------------------------
+#
+# This SDK's pydantic-derived schemas correctly reject every TOP-LEVEL
+# type-mismatch payload (verified while building this fixture: a number for
+# a declared string param, a string for a declared object param, etc. are
+# all rejected before the tool body ever runs — real, honest signal that a
+# well-typed FastMCP/MCPServer-style server is naturally resistant to naive
+# type confusion). The realistic F vector isn't a type mismatch, it's a
+# SCHEMA-VALID-SHAPE mismatch: an "object" param that's genuinely an object,
+# just not shaped the way the handler assumed.
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def process_item(item: dict) -> str:
+    """Process a catalog item and return its formatted name."""
+    try:
+        # Vulnerable: no key-existence check. A bare `{}` (schema-valid —
+        # `item: dict` imposes no required-keys constraint) crashes this.
+        return f"processed: {item['name'].upper()}"
+    except Exception as exc:
+        # Vulnerable: catches the crash but re-surfaces internal detail via
+        # an anticipated ToolError — same realistic leak vector as G's
+        # read_note, applied to a malformed-input trigger instead of a
+        # benign one.
+        raise ToolError(
+            f"processing failed in /srv/mcp-xray-fixture/handlers/process_item.py: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+
 if __name__ == "__main__":
     mcp.run("stdio")

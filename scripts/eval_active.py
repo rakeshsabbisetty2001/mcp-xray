@@ -1,4 +1,4 @@
-"""Ground-truth calibration for category D (active half) and category E.
+"""Ground-truth calibration for category D (active half), E, and F.
 
     uv run python scripts/eval_active.py
 
@@ -9,8 +9,8 @@ precision baseline the passive categories use. This script:
   1. Sanity-checks the structural half fires on both fixtures (expected,
      not scored for precision).
   2. Scores the active half (real payloads: path traversal, SSRF, secret
-     bait) against fixtures/vulnerable/ground_truth_active.yaml.
-  3. Confirms zero active-D/E findings on fixtures/hardened (the real
+     bait, schema confusion) against fixtures/vulnerable/ground_truth_active.yaml.
+  3. Confirms zero active-D/E/F findings on fixtures/hardened (the real
      false-positive baseline for the active half).
 
 Runs entirely against locally stdio-spawned fixtures — no --authorized
@@ -28,9 +28,10 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from mcp_xray.inventory import build_inventory, connect  # noqa: E402
-from mcp_xray.probes import permissions, secrets  # noqa: E402
+from mcp_xray.probes import permissions, schema_confusion, secrets  # noqa: E402
 from mcp_xray.probes.base import Finding  # noqa: E402
 from mcp_xray.probes.permissions import _selftest as permissions_selftest  # noqa: E402
+from mcp_xray.probes.schema_confusion import _selftest as schema_confusion_selftest  # noqa: E402
 from mcp_xray.probes.secrets import _selftest as secrets_selftest  # noqa: E402
 
 _FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
@@ -42,6 +43,7 @@ async def _scan_active(server_dir: Path) -> tuple[list[Finding], list[Finding]]:
         structural = permissions.scan_schema(inv.tools)
         active = await permissions.run(session, inv.tools)
         active += await secrets.run(session, inv.tools)
+        active += await schema_confusion.run(session, inv.tools)
         return structural, active
 
 
@@ -52,6 +54,7 @@ def _category_letter(finding: Finding) -> str:
 async def main() -> None:
     permissions_selftest()  # pure signature-matching logic, no session needed
     await secrets_selftest()  # the redaction-never-leaks check, against the real fixture
+    await schema_confusion_selftest()  # covers the silent-acceptance branch no real fixture can trigger
 
     ground_truth = yaml.safe_load(
         (_FIXTURES_DIR / "vulnerable" / "ground_truth_active.yaml").read_text(encoding="utf-8")
@@ -66,7 +69,7 @@ async def main() -> None:
         print("mcp-xray: structural D found nothing on one of the fixtures — that's a regression", file=sys.stderr)
         sys.exit(1)
 
-    print("\n--- active D + E calibration (vulnerable vs ground_truth_active.yaml) ---")
+    print("\n--- active D + E + F calibration (vulnerable vs ground_truth_active.yaml) ---")
     matched_ids: set[int] = set()
     tp = fn = 0
     for entry in ground_truth:
@@ -98,8 +101,8 @@ async def main() -> None:
     recall = tp / (tp + fn) if (tp + fn) else float("nan")
     print(f"TP={tp} FP={fp} FN={fn}  precision={precision:.2f} recall={recall:.2f}")
 
-    print(f"\n--- false-positive baseline (hardened, active D+E only) ---")
-    print(f"hardened active D+E findings: {len(hard_active)} (expect 0)")
+    print(f"\n--- false-positive baseline (hardened, active D+E+F only) ---")
+    print(f"hardened active D+E+F findings: {len(hard_active)} (expect 0)")
     for f in hard_active:
         print(f"  UNEXPECTED: {f.category} / {f.target} / {f.summary}")
 

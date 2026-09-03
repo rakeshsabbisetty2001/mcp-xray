@@ -30,7 +30,7 @@ from mcp.types import Tool
 
 from .base import Finding, Severity
 from .patterns import load_active_catalog, load_secret_patterns, scan_text
-from .tool_args import first_required_string_arg
+from .tool_args import first_required_string_arg, is_read_only
 
 
 def _save_unsafe_transcript(unsafe_dir: Path, tool_name: str, pattern_id: str, raw_text: str) -> Path:
@@ -49,7 +49,7 @@ async def run(
 
     findings: list[Finding] = []
     for tool in tools:
-        if not (tool.annotations and tool.annotations.read_only_hint is True):
+        if not is_read_only(tool):
             continue  # same fail-closed rule as every other tool-calling probe
         arg = first_required_string_arg(tool)
         if arg is None:

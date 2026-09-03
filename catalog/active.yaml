@@ -13,7 +13,8 @@
 # real metadata credentials — regardless of how the target was reached. See
 # README's Safety section.
 #
-# Category D (over-broad permissions) and E (secret exfiltration).
+# Category D (over-broad permissions), E (secret exfiltration), F (schema
+# confusion / input validation).
 
 ssrf_payloads:
   # Sent to any tool whose schema names/types suggest it accepts a URL.
@@ -89,3 +90,66 @@ secret_bait_values:
   - debug
   - env
   - ".env"
+
+schema_confusion_payloads:
+  # Sent in place of ONE required param at a time, replacing whatever value
+  # a schema-satisfying call would normally send — deliberately the WRONG
+  # JSON type for that param's declared schema type. Detection (probes/
+  # schema_confusion.py) looks for two outcomes, both findings: an
+  # unhandled crash that leaks internals (reuses G's leak-pattern scanner),
+  # or silent acceptance (is_error=False) — a server that doesn't validate
+  # its own declared schema may process the wrong type unsafely downstream,
+  # even though this probe alone can't prove what that downstream does.
+  - id: number_for_string
+    expected_type: string
+    value: 12345
+    severity: medium
+  - id: array_for_string
+    expected_type: string
+    value: ["unexpected", "array"]
+    severity: medium
+  - id: null_for_required
+    expected_type: any   # tried against every declared type — null bypasses type-specific validation entirely
+    value: null
+    severity: medium
+  - id: string_for_number
+    expected_type: number
+    value: "not_a_number"
+    severity: medium
+  - id: string_for_integer
+    expected_type: integer
+    value: "not_an_integer"
+    severity: medium
+  - id: string_for_boolean
+    expected_type: boolean
+    value: "not_a_boolean"
+    severity: low
+  - id: string_for_array
+    expected_type: array
+    value: "not_an_array"
+    severity: medium
+  - id: object_for_array
+    expected_type: array
+    value: {"unexpected": "object"}
+    severity: medium
+  - id: string_for_object
+    expected_type: object
+    value: "not_an_object"
+    severity: medium
+  - id: empty_object_for_object
+    # Schema-valid at the top level (an "object" type param genuinely
+    # getting an object) but semantically empty — a bare `{"type": "object"}`
+    # JSON Schema with no `required`/`properties` sub-constraints accepts
+    # this even from a well-typed pydantic server, unlike the type-mismatch
+    # payloads above. Realistic trigger for a handler that naively indexes
+    # into a dict param without checking the key exists first.
+    expected_type: object
+    value: {}
+    severity: medium
+
+# Oversized-string size for the DoS-smell check — bounded and respectful
+# (plan §2: "DoS smell test (bounded, respectful)"), not an actual DoS
+# attempt. 50KB is enough to surface unbounded string processing (a naive
+# regex, an unindexed substring search, string concatenation in a loop)
+# without meaningfully loading even a modest server.
+oversized_string_chars: 50000

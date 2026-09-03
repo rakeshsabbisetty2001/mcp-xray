@@ -38,3 +38,21 @@ expected:
     target: debug_status
     field: openai_key
     note: same bait call also contains a fake OpenAI-shaped key — both patterns match one response, one Finding each
+
+  - category: F
+    target: process_item
+    field: empty_object_for_object
+    note: >
+      schema-valid empty object crashes a naive item['name'] lookup; caught
+      and re-surfaced via ToolError with a leaked internal path.
+      Type-MISMATCH payloads (number-for-string etc.) are all correctly
+      rejected by this SDK's pydantic validation on every fixture tool —
+      that's the honest "no finding" result, not a probe gap (see
+      schema_confusion.py's module docstring). The "silent acceptance"
+      detection branch has no live-fixture demonstration for the same
+      reason (a well-typed server won't produce it) and is covered instead
+      by schema_confusion.py's own _selftest() with a scripted fake
+      session. The DoS-smell (oversized-string timeout) check similarly has
+      no fixture coverage — demonstrating it would require an intentionally
+      slow tool, which would slow down this eval script; deliberately
+      deferred, not missed.

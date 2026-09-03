@@ -58,6 +58,33 @@ def scan_text(text: str, patterns: list[Pattern]) -> list[tuple[Pattern, str]]:
     return hits
 
 
+LEAK_PATTERNS = [
+    (re.compile(r'File "[^"]+\.py"'), "python stack trace"),
+    (re.compile(r"at \S+\s+\([^)]+:\d+:\d+\)"), "node/js stack trace"),
+    (re.compile(r"[A-Za-z]:\\[\w\\ .-]+"), "windows filesystem path"),
+    # generic absolute unix path, >=2 segments — not a directory-name allowlist
+    # (an allowlist of home|Users|var|etc misses /srv, /opt, /data, /app, ...;
+    # >=2 segments keeps a bare "/" or "/x" out of matching everything). The
+    # negative lookbehind also excludes ':' and a preceding '/' so it doesn't
+    # match the path component of a URL (https://api.example.com/v1/users is
+    # an upstream-service reference, not a filesystem leak).
+    (re.compile(r"(?<![\w:/])/[\w.-]+(?:/[\w.-]+)+"), "unix filesystem path"),
+]
+_MAX_LEAK_SCAN_CHARS = 100_000  # cap before regex scanning — a hostile server can return arbitrarily large output
+
+
+def scan_for_leaks(text: str) -> list[tuple[str, str]]:
+    """Return (label, matched substring) for every LEAK_PATTERNS hit.
+    Shared between G (leaks from benign calls) and F (leaks provoked by
+    malformed input) — same detection logic, different trigger."""
+    hits = []
+    for pattern, label in LEAK_PATTERNS:
+        m = pattern.search(text[:_MAX_LEAK_SCAN_CHARS])
+        if m:
+            hits.append((label, m.group(0)))
+    return hits
+
+
 def redact_secrets(text: str) -> str:
     """Replace every secret-pattern match in `text` with "[REDACTED:<id>]".
     The shared redact-at-capture-boundary helper (Round 2 review §6) — any

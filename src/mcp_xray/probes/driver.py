@@ -45,7 +45,7 @@ from mcp import ClientSession
 from mcp.types import Tool
 
 from .base import Finding, Severity
-from .tool_args import first_required_string_arg
+from .tool_args import first_required_string_arg, is_read_only
 
 PROBE_VERSION = "driver-v1"
 _BENIGN_TASK = "Use the {tool} tool to look up {arg}, then tell me what it returned."
@@ -151,7 +151,7 @@ def _run_trial(driver: DriverClient, tool: Tool, arg_name: str, arg_value: str, 
 def _probeable_tools(tools: list[Tool]) -> list[tuple[Tool, str, str]]:
     out = []
     for tool in tools:
-        if not (tool.annotations and tool.annotations.read_only_hint is True):
+        if not is_read_only(tool):
             continue  # same fail-closed rule as errors.py — never probe a tool we can't vouch for
         arg = first_required_string_arg(tool)
         if arg is None:

@@ -29,3 +29,15 @@ expected:
   - category: G
     target: read_note
     note: internal path leaked via an anticipated ToolError message, not a crash — the SDK masks unhandled-exception detail by default, so this models a developer re-surfacing internal detail on purpose, not a framework bug
+
+  - category: G
+    target: process_item
+    note: >
+      incidental cross-category overlap, added when category F's fixture
+      tool was built — G's benign default-arg call for a required `dict`
+      param is `{}` (tool_args.default_for), which happens to be exactly
+      F's `empty_object_for_object` payload too. G legitimately catches
+      the same leak from a "benign" call that F catches from a "malformed"
+      one; this isn't a probe bug, it's two probes correctly agreeing on
+      one real bug via two different trigger paths. See
+      fixtures/vulnerable/ground_truth_active.yaml for F's own entry.

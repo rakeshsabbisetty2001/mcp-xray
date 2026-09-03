@@ -17,6 +17,7 @@ from mcp.types import Tool
 
 from .base import Finding, Severity
 from .patterns import load_active_catalog, redact_secrets
+from .tool_args import is_read_only
 
 # Response signatures that indicate a payload actually escaped/reached
 # something — heuristic against an unknown real target's real content, exact
@@ -120,7 +121,7 @@ async def run(session: ClientSession, tools: list[Tool]) -> list[Finding]:
 
     findings: list[Finding] = []
     for tool in tools:
-        if not (tool.annotations and tool.annotations.read_only_hint is True):
+        if not is_read_only(tool):
             continue  # same fail-closed rule as every other tool-calling probe
         props = (tool.input_schema or {}).get("properties", {})
         required = set((tool.input_schema or {}).get("required", []))

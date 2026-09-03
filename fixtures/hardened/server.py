@@ -103,5 +103,15 @@ def debug_status(mode: str) -> str:
     return "status: ok"
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def process_item(item: dict) -> str:
+    """Process a catalog item and return its formatted name."""
+    # Sanitized: no key-existence assumption, no internal detail on failure.
+    name = item.get("name")
+    if not isinstance(name, str):
+        raise ToolError("item missing required 'name' field")
+    return f"processed: {name.upper()}"
+
+
 if __name__ == "__main__":
     mcp.run("stdio")
