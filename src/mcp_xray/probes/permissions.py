@@ -105,7 +105,9 @@ async def _probe_param(
                 severity=Severity(payload["severity"]),
                 target=f"{tool.name} (param.{param_name})",
                 summary=f"Payload '{payload['id']}' ({payload['value']!r}) produced a response matching a known escape/fetch signature",
-                evidence=redact_secrets(text[:500]),
+                # redact first, THEN truncate — a 500-char cut landing mid-key
+                # would leave an unmatchable partial "AKIA..." fragment
+                evidence=redact_secrets(text)[:500],
             ))
     return findings
 

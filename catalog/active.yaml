@@ -61,7 +61,8 @@ risky_param_names:
 secret_patterns:
   # Same shape as passive.yaml's instruction_patterns, different job: these
   # match actual credential material, not instruction text — so a hit here
-  # is redacted before it ever becomes a Finding (report/redact.py), unlike
+  # is redacted before it ever becomes a Finding (probes/patterns.py's
+  # redact_secrets()), unlike
   # B/C/G's evidence which is safe to show in full.
   - id: aws_access_key
     pattern: 'AKIA[0-9A-Z]{16}'
