@@ -14,7 +14,7 @@ Point it at your own MCP server (or a fixture) and get a scored report of what's
 Not published to PyPI yet, so no `uvx mcp-xray` one-liner — run from a checkout:
 
 ```bash
-git clone <this-repo> && cd mcp-xray
+git clone https://github.com/rakeshsabbisetty2001/mcp-xray && cd mcp-xray
 uv sync
 uv run mcp-xray npx -y @modelcontextprotocol/server-filesystem /path/to/sandbox
 ```
