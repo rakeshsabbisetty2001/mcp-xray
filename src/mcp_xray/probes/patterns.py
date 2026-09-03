@@ -56,3 +56,16 @@ def scan_text(text: str, patterns: list[Pattern]) -> list[tuple[Pattern, str]]:
         if m:
             hits.append((p, m.group(0)))
     return hits
+
+
+def redact_secrets(text: str) -> str:
+    """Replace every secret-pattern match in `text` with "[REDACTED:<id>]".
+    The shared redact-at-capture-boundary helper (Round 2 review §6) — any
+    probe that might echo a real target's response back as evidence must
+    route it through this before it becomes a Finding field, not just E's
+    own probe (a lesson from category D's own SSRF/traversal responses,
+    which can legitimately contain real credentials against a real target)."""
+    patterns = load_secret_patterns()
+    for p in patterns:
+        text = p.regex.sub(f"[REDACTED:{p.id}]", text)
+    return text

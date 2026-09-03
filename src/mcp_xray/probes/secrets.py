@@ -13,6 +13,12 @@ for free because the unsafe text never becomes a Finding field in the first
 place. The one place raw text can land is a local, gitignored file, and only
 when the caller explicitly passes `unsafe_dir` (wired to CLI
 --unsafe-full-transcripts) — never printed, never in any of the three reports.
+
+This is where the pattern originated but not the only place it's needed:
+permissions.py's active probes (D) can legitimately capture real credentials
+too (an SSRF hit on a cloud metadata endpoint is one hop from AccessKeyId/
+SecretAccessKey) — patterns.py's `redact_secrets()` is the shared helper both
+files route through, found missing from D in this phase's Round 1 review.
 """
 from __future__ import annotations
 

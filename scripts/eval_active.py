@@ -74,8 +74,15 @@ async def main() -> None:
         hit = next(
             (
                 i for i, f in enumerate(vuln_active)
-                if i not in matched_ids and _category_letter(f) == cat and f.target.startswith(target)
-                and (field is None or field in f.summary)
+                if i not in matched_ids and _category_letter(f) == cat
+                # exact tool-name compare (not startswith) so "read_file" can't
+                # prefix-match a hypothetical "read_file_v2"; both D and E
+                # target strings are "<tool> (...)", so split off the parens
+                and f.target.split(" (", 1)[0] == target
+                # field is quoted in both D's and E's summary format
+                # ("Payload 'x'" / "pattern 'x'") — match the quoted form,
+                # not a bare substring, so it can't match inside unrelated text
+                and (field is None or f"'{field}'" in f.summary)
             ),
             None,
         )

@@ -16,7 +16,7 @@ from mcp import ClientSession
 from mcp.types import Tool
 
 from .base import Finding, Severity
-from .patterns import load_active_catalog
+from .patterns import load_active_catalog, redact_secrets
 
 # Response signatures that indicate a payload actually escaped/reached
 # something — heuristic against an unknown real target's real content, exact
@@ -51,7 +51,13 @@ def scan_schema(tools: list[Tool]) -> list[Finding]:
             if name.lower() in risky_names:
                 findings.append(Finding(
                     category="D: Over-Broad Permission (Structural)",
-                    severity=Severity.MEDIUM,
+                    # LOW, not MEDIUM (Round 1 review this phase): this check
+                    # fires identically on both fixtures by construction — a
+                    # risky-shaped param name is inventory context for a
+                    # human or for --authorized's active probes, not a
+                    # discriminating finding on its own. eval_active.py
+                    # correctly refuses to score it for precision/recall.
+                    severity=Severity.LOW,
                     target=f"{tool.name} (param.{name})",
                     summary=(
                         f"Parameter '{name}' accepts a free-form string and its name suggests "
@@ -89,12 +95,17 @@ async def _probe_param(
         text = "\n".join(getattr(c, "text", "") for c in result.content if getattr(c, "text", None))
         signatures = signature_sets.get(payload["id"], ())
         if any(sig in text.lower() for sig in signatures):
+            # This response can legitimately contain real credentials against
+            # a real target — an SSRF hit on the AWS metadata endpoint is one
+            # hop from AccessKeyId/SecretAccessKey, and a traversal/file://
+            # hit is arbitrary file content. Same capture-boundary redaction
+            # E uses, not just a truncation (Round 2 review, this phase).
             findings.append(Finding(
                 category=category,
                 severity=Severity(payload["severity"]),
                 target=f"{tool.name} (param.{param_name})",
                 summary=f"Payload '{payload['id']}' ({payload['value']!r}) produced a response matching a known escape/fetch signature",
-                evidence=text[:500],
+                evidence=redact_secrets(text[:500]),
             ))
     return findings
 
@@ -137,6 +148,16 @@ def _selftest() -> None:
         signatures = _SSRF_SIGNATURE_SETS[payload_id]
         matched = any(sig in text.lower() for sig in signatures)
         assert matched == should_match, f"{payload_id} on {text!r}: expected match={should_match}, got {matched}"
+
+    # Regression check: D's evidence must be redacted, not just truncated
+    # (Round 1 review this phase — a real hole: D's own best-case SSRF hit,
+    # the AWS metadata endpoint, is one hop from real AccessKeyId/
+    # SecretAccessKey material, and that text used to go straight into
+    # Finding.evidence unredacted).
+    leaky_response = "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\nami-id"
+    redacted = redact_secrets(leaky_response)
+    assert "AKIAIOSFODNN7EXAMPLE" not in redacted, "redact_secrets() failed to redact an AWS key"
+    assert "[REDACTED:aws_access_key]" in redacted
 
 
 if __name__ == "__main__":

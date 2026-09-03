@@ -3,8 +3,15 @@
 # every probe here is used only against locally stdio-spawned processes in
 # this CLI — there is no remote-host transport built yet (plan §1
 # out-of-scope), so the Round 2 review's "refuse non-localhost unless
-# --allow-remote" rule has nothing to gate yet. Deferred, not forgotten —
-# add --allow-remote when HTTP/SSE transport exists.
+# --allow-remote" rule has nothing to gate yet at the TRANSPORT level.
+# Deferred, not forgotten — add --allow-remote when HTTP/SSE transport exists.
+#
+# That transport-level deferral does NOT cover the real remaining risk: the
+# SSRF payloads' danger is about the SCANNER's network position, not the
+# target's transport. Running --authorized's SSRF probe against a vulnerable
+# fetch_url-shaped tool on a cloud instance makes that instance fetch ITS
+# real metadata credentials — regardless of how the target was reached. See
+# README's Safety section.
 #
 # Category D (over-broad permissions) and E (secret exfiltration).
 

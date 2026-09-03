@@ -100,8 +100,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--authorized", action="store_true",
-        help="run category D's active half (real path-traversal/SSRF payloads) and category E "
-             "(secret-bait probing) — real attacks, only against a server you own or are authorized to test",
+        help="send real attack payloads: SSRF (AWS metadata endpoint, localhost:22, file:// scheme), "
+             "path traversal (../../../../etc/passwd), and secret-bait tool calls (config/debug/env "
+             "argument values) — only against a server you own or are explicitly authorized to test. "
+             "See README's Safety section before pointing this at anything else.",
     )
     parser.add_argument(
         "--unsafe-full-transcripts", metavar="DIR", default=None,

@@ -11,7 +11,8 @@
 expected:
   - category: D
     target: read_file
-    note: unix path traversal escape (fake /etc/passwd content) — windows_traversal payload intentionally produces no separate finding, since this fixture's read_file doesn't distinguish payload shape, only "contains .."
+    field: unix_traversal
+    note: unix path traversal escape (fake /etc/passwd content) — windows_traversal payload intentionally produces no separate finding (pinned via `field` so a regression that made windows_traversal also fire wouldn't be silently absorbed as the same TP), since this fixture's read_file doesn't distinguish payload shape, only "contains .."
 
   - category: D
     target: fetch_url
