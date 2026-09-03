@@ -11,6 +11,8 @@ Point it at your own MCP server (or a fixture) and get a scored report of what's
 
 ## Quickstart
 
+Not published to PyPI yet, so no `uvx mcp-xray` one-liner — run from a checkout:
+
 ```bash
 git clone <this-repo> && cd mcp-xray
 uv sync
@@ -22,6 +24,8 @@ Or against the project's own fixtures (no external server needed):
 ```bash
 uv run mcp-xray --authorized uv run python fixtures/vulnerable/server.py
 ```
+
+The packaging work is done regardless: catalog data ships inside the package (not repo-relative), so once this is published, `uvx mcp-xray <command>` / `pipx install mcp-xray` will work standalone — verified by building the wheel and running it from an isolated install with no checkout on disk.
 
 ## What it checks
 
@@ -39,7 +43,7 @@ Categories D (active half), E, and F send real attack payloads — see **Safety*
 
 ## Example output
 
-Real output from `mcp-xray --authorized` against this project's own deliberately-vulnerable fixture (`fixtures/vulnerable/server.py`) — 19 findings across all 7 categories:
+Real output from `mcp-xray --authorized` against this project's own deliberately-vulnerable fixture (`fixtures/vulnerable/server.py`) — 19 findings across **six** categories (B, C, D, E, F, G; A needs `--agentic` and a real model, not included here):
 
 ```
 $ mcp-xray --authorized uv run python fixtures/vulnerable/server.py
@@ -47,13 +51,15 @@ $ mcp-xray --authorized uv run python fixtures/vulnerable/server.py
 19 findings — 3 critical · 7 high · 7 medium · 2 low
 ```
 
+Abridged to one row per (category, tool) pair — the full 19, including every duplicate hit and the exact JSON, come from `--json`:
+
 | Sev | Category | Target |
 |---|---|---|
 | CRITICAL | D: SSRF | `fetch_url` (param.url) — AWS metadata endpoint |
-| CRITICAL | E: Secret Exfiltration | `debug_status` (arg.mode='config') |
-| HIGH | C: Tool Metadata Poisoning | `summarize_document` (description) |
-| HIGH | B: Resource Injection | `readme` |
-| HIGH | D: Path Traversal | `read_file` (param.path) |
+| CRITICAL | E: Secret Exfiltration | `debug_status` (arg.mode='config') — 2 patterns matched (AWS key + OpenAI-shaped key), one row each in the real output |
+| HIGH | C: Tool Metadata Poisoning | `summarize_document` (description), `lookup_user` (nested `$ref` field) |
+| HIGH | B: Resource Injection / Prompt Injection | `readme`, `daily_summary` (description) |
+| HIGH | D: Path Traversal / SSRF | `read_file` (param.path), `fetch_url` (param.url) — 2 more SSRF payloads |
 | MEDIUM | G: Error Information Leak | `read_note`, `process_item` |
 | MEDIUM | F: Schema Confusion (Info Leak) | `process_item` (param.item) |
 | LOW | D: Over-Broad Permission (Structural) | `read_file`, `fetch_url` |

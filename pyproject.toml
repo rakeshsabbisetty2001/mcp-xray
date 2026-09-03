@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
-    { name = "raksab01", email = "rakeshsabbisetty2001@gmail.com" }
+    { name = "raksab01", email = "rakeshsabbisetty@gmail.com" }
 ]
 keywords = ["mcp", "model-context-protocol", "security", "red-team", "prompt-injection", "llm-security"]
 requires-python = ">=3.12"
@@ -17,6 +17,9 @@ dependencies = [
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/raksab01/mcp-xray"
 
 [project.scripts]
 mcp-xray = "mcp_xray.cli:main"
